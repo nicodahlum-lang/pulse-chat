@@ -2,6 +2,34 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+
+let pool = null;
+
+if (process.env.DATABASE_URL) {
+  pool = new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false,
+    },
+  });
+}
+
+async function ensureDbSchema() {
+  if (!pool) return;
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pulse_chat_state (
+        id INT PRIMARY KEY,
+        state TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  } finally {
+    client.release();
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -184,6 +212,24 @@ export async function loadState() {
     return state;
   }
 
+  if (pool) {
+    try {
+      await ensureDbSchema();
+      const res = await pool.query('SELECT state FROM pulse_chat_state WHERE id = 1');
+      if (res.rows.length > 0) {
+        state = JSON.parse(res.rows[0].state);
+        return state;
+      } else {
+        state = ensureSeedState();
+        const json = JSON.stringify(state);
+        await pool.query('INSERT INTO pulse_chat_state (id, state) VALUES (1, $1)', [json]);
+        return state;
+      }
+    } catch (error) {
+      console.error('Failed to load state from database, falling back to file:', error);
+    }
+  }
+
   const persisted = await readStateFile();
   state = persisted ?? ensureSeedState();
   return state;
@@ -191,10 +237,25 @@ export async function loadState() {
 
 export async function saveState(nextState) {
   state = clone(nextState);
+  const json = JSON.stringify(state);
+
+  if (pool) {
+    writeQueue = writeQueue.then(async () => {
+      try {
+        await pool.query(
+          'INSERT INTO pulse_chat_state (id, state, updated_at) VALUES (1, $1, CURRENT_TIMESTAMP) ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, updated_at = CURRENT_TIMESTAMP',
+          [json]
+        );
+      } catch (error) {
+        console.error('Failed to save state to database:', error);
+      }
+    });
+  }
+
   await ensureDataDir();
-  const json = JSON.stringify(state, null, 2);
+  const jsonFormatted = JSON.stringify(state, null, 2);
   writeQueue = writeQueue.then(async () => {
-    await writeFile(tempFile, json, 'utf8');
+    await writeFile(tempFile, jsonFormatted, 'utf8');
     await rename(tempFile, stateFile);
   });
   return writeQueue;
