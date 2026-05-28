@@ -72,15 +72,48 @@ Voice läuft als lokaler Push-to-talk-Stream:
 
 Das ist bewusst lokal und einfach gehalten, damit die Funktion ohne separate Infrastruktur funktioniert.
 
-## Erweiterung
+## Fortgeschrittene Features (Neu)
 
-Gute Stellen für weitere Features:
+Folgende Premium-Features wurden hinzugefügt:
 
-- Reaktionen und Thread-Antworten in `backend/src/store.js`
-- DMs und Freundesliste im Frontend unter `frontend/src/components/`
-- Suchfunktion und Kanalfilter in `frontend/src/App.tsx`
-- Persistente Präsenz / Typing-Indikatoren im Socket-Layer
+- **Direktnachrichten (DMs)**: Private 1-on-1-Räume zwischen Mitgliedern.
+- **Emoji-Reaktionen**: Emoji-Reaktionen unter Nachrichten in Echtzeit.
+- **Thread-Antworten**: Nachrichten-Zitate und verschachtelte Antworten.
+- **Markdown**: Formatiere Nachrichten mit `**fett**`, `*kursiv*` oder Code-Blöcken.
+- **Präsenz-Status**: Wähle deinen Status (`online`, `idle`, `dnd`, `offline`) und setze individuelle Aktivitätsnachrichten.
+- **Voice-Visualizer**: Die Sprech-Karten leuchten und pulsieren in Echtzeit basierend auf der Mikrofon-Lautstärke.
+- **Profil-Auswahl & Erstellung**: Ein moderner Login-Screen ermöglicht es, als bestehendes Mitglied beizutreten oder direkt ein neues Profil mit Name, Rolle und Avatar-Farbe zu erstellen.
+
+## Cloud-Deployment & Datenbank-Persistenz
+
+Die App kann komplett kostenlos im Internet gehostet werden (z. B. auf **Render.com**), sodass du sie mit deinen Freunden teilen kannst. 
+
+Da Server auf Render im Free-Plan temporären Speicher nutzen (Daten gehen bei Neustarts verloren), wurde eine **PostgreSQL-Datenbankintegration** hinzugefügt. Wenn die Umgebungsvariable `DATABASE_URL` gesetzt ist, speichert die App alle Chats und Mitglieder automatisch in einer Cloud-Datenbank.
+
+### Setup-Anleitung (Render + Neon/Supabase)
+
+1. **Kostenlose PostgreSQL-Datenbank erstellen**:
+   - Erstelle eine kostenlose Datenbank bei [Neon.tech](https://neon.tech) oder [Supabase.com](https://supabase.com).
+   - Kopiere den Verbindungs-String (`postgresql://...`).
+
+2. **Web Service auf Render erstellen**:
+   - Melde dich bei [Render.com](https://render.com) an.
+   - Wähle **New +** > **Web Service**.
+   - Verbinde das GitHub-Repository `pulse-chat`.
+   - Konfiguriere folgende Felder:
+     - **Build Command**: `npm run build`
+     - **Start Command**: `npm start`
+     - **Instance Type**: `Free`
+
+3. **Umgebungsvariablen eintragen**:
+   - Gehe im Render-Dashboard deines Services auf **Environment** und füge hinzu:
+     - `NODE_ENV` = `production`
+     - `DATABASE_URL` = *[Dein PostgreSQL-Verbindungs-String]*
+
+4. **Deployen & Teilen**:
+   - Nach erfolgreichem Build ist die App über die Render-URL (z. B. `https://dein-pulse-chat.onrender.com`) für dich und deine Freunde im Internet erreichbar! Beim ersten Laden kann jeder sein eigenes Profil erstellen und sofort loslegen.
 
 ## Verifikation
 
 Siehe [VALIDATION.md](./VALIDATION.md) für die konkrete Prüfliste.
+
