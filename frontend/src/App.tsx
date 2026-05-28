@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { createChannel, createMessage, createServer, getBootstrap, joinVoiceRoom, leaveVoiceRoom, getOrCreateDM, toggleReaction } from './api';
-import type { BootstrapPayload, Message, VoiceRoom, Presence } from './types';
+import type { BootstrapPayload, Message, VoiceRoom, Presence, Member } from './types';
 import { ChannelSidebar } from './components/ChannelSidebar';
 import { ChatPanel } from './components/ChatPanel';
 import { CreateChannelModal } from './components/CreateChannelModal';
@@ -28,13 +28,15 @@ interface ServerToClientEvents {
   'message:new': (message: Message) => void;
   'voice:state': (payload: { channelId: string; room: VoiceRoom }) => void;
   'state:reset': (payload: BootstrapPayload) => void;
-  'voice:chunk': (payload: { chunk: ArrayBuffer; mimeType: string; userId: string; channelId: string }) => void;
+  'voice:chunk': (payload: { chunk: ArrayBuffer; mimeType: string; userId: string; channelId: string; volume?: number }) => void;
   'typing:update': (payload: { channelId: string; users: string[] }) => void;
+  'message:update': (message: Message) => void;
+  'user:status:update': (payload: { userId: string; status: Presence; activity: string; members: Member[] }) => void;
 }
 
 interface ClientToServerEvents {
   'join:channel': (payload: { channelId: string; userId: string }) => void;
-  'voice:chunk': (payload: { channelId: string; userId: string; chunk: ArrayBuffer; mimeType: string; speaking: boolean }) => void;
+  'voice:chunk': (payload: { channelId: string; userId: string; chunk: ArrayBuffer; mimeType: string; speaking: boolean; volume?: number }) => void;
   'voice:stop': (payload: { channelId: string; userId: string }) => void;
   'leave:channel': (payload: { channelId: string; userId: string }) => void;
   'typing:update': (payload: { channelId: string; userId: string; isTyping: boolean }) => void;

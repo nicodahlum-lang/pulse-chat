@@ -20,7 +20,7 @@ function ChannelSidebarComponent(props: Props) {
 
   if (selectedServerId === 'dms') {
     const activeDMs = channels.filter((c) => c.type === 'dm');
-    const otherMembers = members.filter((m) => m.id !== currentUser?.id);
+    const otherMembers = members.filter((m) => m.handle !== currentUser?.handle && m.id !== currentUser?.id && m.id !== 'me');
 
     return (
       <aside className="sidebar">
