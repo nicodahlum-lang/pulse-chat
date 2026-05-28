@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resetState, createMessage, createServer, createChannel, loadState, seededWorkspace } from '../src/store.js';
+import { resetState, createMessage, createServer, createChannel, loadState, seededWorkspace, registerMember } from '../src/store.js';
 
 test('seeded workspace includes text and voice channels', async () => {
   const state = await resetState();
@@ -21,3 +21,22 @@ test('can create a server, channel and message', async () => {
   assert.equal(message.content, 'Hello from the test harness');
   assert.equal(state.messages.at(-1).id, message.id);
 });
+
+test('can register a custom member', async () => {
+  await resetState();
+  const input = {
+    name: '  Alex Test  ',
+    role: 'Developer',
+    avatarFrom: '#ff0000',
+    avatarTo: '#0000ff'
+  };
+  const member = await registerMember(input);
+  assert.equal(member.name, 'Alex Test');
+  assert.equal(member.role, 'Developer');
+  assert.equal(member.handle, '@alex-test');
+  assert.equal(member.avatar.from, '#ff0000');
+  
+  const state = await loadState();
+  assert.ok(state.members.find((m) => m.id === member.id));
+});
+
