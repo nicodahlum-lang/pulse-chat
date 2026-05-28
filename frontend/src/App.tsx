@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { createChannel, createMessage, createServer, getBootstrap, joinVoiceRoom, leaveVoiceRoom, getOrCreateDM, toggleReaction } from './api';
+import { createChannel, createMessage, createServer, getBootstrap, joinVoiceRoom, leaveVoiceRoom, getOrCreateDM, toggleReaction, registerMember } from './api';
 import type { BootstrapPayload, Message, VoiceRoom, Presence, Member } from './types';
 import { ChannelSidebar } from './components/ChannelSidebar';
 import { ChatPanel } from './components/ChatPanel';
@@ -8,6 +8,7 @@ import { CreateChannelModal } from './components/CreateChannelModal';
 import { CreateServerModal } from './components/CreateServerModal';
 import { InspectorPanel } from './components/InspectorPanel';
 import { ServerRail } from './components/ServerRail';
+import { LoginModal } from './components/LoginModal';
 
 function mergeMessage(existing: Message[], incoming: Message) {
   if (existing.some((message) => message.id === incoming.id)) {
@@ -61,14 +62,24 @@ export default function App() {
   const lastTypingEmittedRef = useRef<boolean>(false);
   const lastTypingTimeRef = useRef<number>(0);
 
+  const [userId, setUserId] = useState<string | null>(localStorage.getItem('pulse_chat_user_id'));
+
   useEffect(() => {
     let active = true;
+    setLoading(true);
 
-    getBootstrap()
+    getBootstrap(userId || undefined)
       .then((payload) => {
         if (!active) return;
         bootRef.current = payload;
         setBoot(payload);
+
+        if (userId && !payload.members.some(m => m.id === userId) && payload.currentUser.id !== userId) {
+          console.warn("User ID not found in members, clearing local selection.");
+          localStorage.removeItem('pulse_chat_user_id');
+          setUserId(null);
+        }
+
         setSelectedServerId((current) => current || payload.servers[0]?.id || '');
         const initialServer = payload.servers[0];
         const initialChannel = payload.channels.find((channel) => channel.serverId === initialServer?.id);
@@ -135,10 +146,10 @@ export default function App() {
       setSelectedChannelId(firstChannel?.id || '');
     });
 
-    socket.on('voice:chunk', async ({ chunk, mimeType, userId, channelId }: { chunk: ArrayBuffer; mimeType: string; userId: string; channelId: string }) => {
+    socket.on('voice:chunk', async ({ chunk, mimeType, userId: speakUid, channelId }: { chunk: ArrayBuffer; mimeType: string; userId: string; channelId: string }) => {
       const currentChannel = bootRef.current?.channels.find((item) => item.id === selectedChannelRef.current);
       if (!currentChannel || currentChannel.id !== channelId) return;
-      if (userId === bootRef.current?.currentUser.id) return;
+      if (speakUid === bootRef.current?.currentUser.id) return;
 
       const audioContext = audioCtxRef.current ?? new AudioContext();
       audioCtxRef.current = audioContext;
@@ -190,26 +201,26 @@ export default function App() {
       }
     });
 
-    socket.on('user:status:update', ({ userId, status, activity, members }) => {
+    socket.on('user:status:update', ({ userId: statusUid, status, activity, members }) => {
       setBoot((current) => {
         if (!current) return current;
-        const nextCurrentUser = userId === current.currentUser.id || userId === 'me'
+        const nextCurrentUser = statusUid === current.currentUser.id || statusUid === 'me'
           ? { ...current.currentUser, status, activity }
           : current.currentUser;
         return {
           ...current,
           currentUser: nextCurrentUser,
-          members: members || current.members.map((m) => (m.id === userId ? { ...m, status, activity } : m)),
+          members: members || current.members.map((m) => (m.id === statusUid ? { ...m, status, activity } : m)),
         };
       });
       if (bootRef.current) {
-        const nextCurrentUser = userId === bootRef.current.currentUser.id || userId === 'me'
+        const nextCurrentUser = statusUid === bootRef.current.currentUser.id || statusUid === 'me'
           ? { ...bootRef.current.currentUser, status, activity }
           : bootRef.current.currentUser;
         bootRef.current = {
           ...bootRef.current,
           currentUser: nextCurrentUser,
-          members: members || bootRef.current.members.map((m) => (m.id === userId ? { ...m, status, activity } : m)),
+          members: members || bootRef.current.members.map((m) => (m.id === statusUid ? { ...m, status, activity } : m)),
         };
       }
     });
@@ -222,7 +233,7 @@ export default function App() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, []);
+  }, [userId]);
 
   const currentServer = useMemo(() => boot?.servers.find((server) => server.id === selectedServerId) ?? null, [boot?.servers, selectedServerId]);
   const serverChannels = useMemo(() => {
@@ -535,6 +546,46 @@ export default function App() {
     }
     return currentChannel.serverId !== currentServer?.id;
   }, [currentChannel, selectedServerId, currentServer?.id]);
+
+  if (error) {
+    return (
+      <div className="login-overlay">
+        <div className="login-card" style={{ alignItems: 'center', textAlign: 'center' }}>
+          <div className="brand-mark" style={{ margin: '0 auto 16px', background: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>!</div>
+          <h3 style={{ fontFamily: 'Space Grotesk', fontSize: '1.4rem', margin: '0 0 8px', color: 'var(--danger)' }}>Server-Fehler</h3>
+          <p className="helper" style={{ marginBottom: '16px' }}>{error}</p>
+          <button className="action" onClick={() => window.location.reload()}>Verbindung neu aufbauen</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!userId || (boot && !boot.members.some(m => m.id === userId) && boot.currentUser.id !== userId)) {
+    if (loading) {
+      return (
+        <div className="login-overlay">
+          <div className="login-card" style={{ alignItems: 'center', textAlign: 'center' }}>
+            <div className="brand-mark" style={{ margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>P</div>
+            <h3 style={{ fontFamily: 'Space Grotesk', fontSize: '1.4rem', margin: '0 0 8px' }}>Pulse Chat lädt...</h3>
+            <p className="helper">Workspace-Verbindung wird initialisiert.</p>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <LoginModal
+        members={boot?.members ?? []}
+        onLogin={(id) => {
+          localStorage.setItem('pulse_chat_user_id', id);
+          setUserId(id);
+        }}
+        onRegister={async (input) => {
+          const res = await registerMember(input);
+          return res.id;
+        }}
+      />
+    );
+  }
 
   return (
     <div className="app">

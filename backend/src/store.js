@@ -538,4 +538,41 @@ export async function updateUserStatus({ userId, status, activity }) {
   return { currentUser: snapshot.currentUser, members: snapshot.members };
 }
 
+export async function registerMember(input) {
+  const snapshot = await loadState();
+  const name = String(input.name ?? '').trim().slice(0, 42) || 'Gast';
+  const rawId = slugify(name);
+  const id = rawId && rawId !== 'new-space' ? rawId : compactId('user');
+  const handle = `@${id}`;
+
+  let member = snapshot.members.find((m) => m.id === id || m.handle === handle);
+  if (!member) {
+    member = {
+      id,
+      name,
+      handle,
+      role: String(input.role ?? '').trim().slice(0, 32) || 'Gast',
+      status: 'online',
+      activity: 'ist beigetreten',
+      avatar: {
+        type: 'gradient',
+        from: String(input.avatarFrom ?? '#4dd6ff'),
+        to: String(input.avatarTo ?? '#aa7bff'),
+        label: name.charAt(0).toUpperCase() || '?',
+      },
+    };
+    snapshot.members.push(member);
+    pushActivity(snapshot, {
+      id: compactId('act'),
+      type: 'server',
+      title: `${name} ist beigetreten`,
+      detail: `Neues Mitglied registriert als ${handle}`,
+      time: 'Gerade eben',
+    });
+    await saveState(snapshot);
+  }
+  return member;
+}
+
 export { defaultWorkspace as seededWorkspace };
+

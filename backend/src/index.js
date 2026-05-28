@@ -22,6 +22,7 @@ import {
   getOrCreateDMChannel,
   toggleReaction,
   updateUserStatus,
+  registerMember,
 } from './store.js';
 
 const PORT = Number(process.env.PORT ?? 5001);
@@ -48,14 +49,45 @@ app.get('/api/health', async (_req, res) => {
   res.json({ ok: true, service: 'pulse-chat-backend', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/bootstrap', async (_req, res) => {
+app.get('/api/bootstrap', async (req, res) => {
   const snapshot = await loadState();
-  res.json(getPublicState(snapshot));
+  const userId = req.query.userId;
+  const pub = getPublicState(snapshot);
+  if (userId) {
+    const member = snapshot.members.find((m) => m.id === userId);
+    if (member) {
+      pub.currentUser = member;
+    }
+  }
+  res.json(pub);
 });
 
-app.get('/api/state', async (_req, res) => {
+app.get('/api/state', async (req, res) => {
   const snapshot = await loadState();
-  res.json(getPublicState(snapshot));
+  const userId = req.query.userId;
+  const pub = getPublicState(snapshot);
+  if (userId) {
+    const member = snapshot.members.find((m) => m.id === userId);
+    if (member) {
+      pub.currentUser = member;
+    }
+  }
+  res.json(pub);
+});
+
+app.post('/api/register', async (req, res) => {
+  try {
+    const name = sanitizeText(req.body?.name, 42);
+    const role = sanitizeText(req.body?.role, 32);
+    const avatarFrom = sanitizeText(req.body?.avatarFrom, 24);
+    const avatarTo = sanitizeText(req.body?.avatarTo, 24);
+    
+    if (!name) throw new Error('Name is required');
+    const member = await registerMember({ name, role, avatarFrom, avatarTo });
+    res.status(201).json(member);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
 });
 
 app.post('/api/servers', async (req, res) => {

@@ -17,9 +17,18 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function getBootstrap() {
-  return fetchJson<BootstrapPayload>('/api/bootstrap');
+export function getBootstrap(userId?: string) {
+  const query = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+  return fetchJson<BootstrapPayload>(`/api/bootstrap${query}`);
 }
+
+export function registerMember(input: { name: string; role: string; avatarFrom?: string; avatarTo?: string }) {
+  return fetchJson<{ id: string; name: string; handle: string; role: string; avatar: any }>('/api/register', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 
 export function createServer(input: { name: string; icon: string; accent: string; description: string }) {
   return fetchJson<Server>('/api/servers', {
