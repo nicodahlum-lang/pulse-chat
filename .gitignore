@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+backend/data/state.json
+backend/data/state.json.tmp
+*.log
+.env
+.env.local

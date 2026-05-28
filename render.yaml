@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: pulse-chat
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install
+    startCommand: npm --prefix backend start
+    envVars:
+      - key: NODE_ENV
+        value: production
