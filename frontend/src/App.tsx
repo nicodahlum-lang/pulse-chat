@@ -64,6 +64,8 @@ export default function App() {
   const lastTypingEmittedRef = useRef<boolean>(false);
   const lastTypingTimeRef = useRef<number>(0);
   const [sessionToken, setSessionToken] = useState<string | null>(() => localStorage.getItem('pulse_chat_session_token'));
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isMobileInspectorOpen, setIsMobileInspectorOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -607,49 +609,49 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <ServerRail
-        currentUser={boot?.currentUser ?? null}
-        servers={boot?.servers ?? []}
-        selectedServerId={selectedServerId}
-        onSelect={setSelectedServerId}
-        onCreate={() => setServerModalOpen(true)}
-        socketState={socketState}
-      />
+    <div className={`app ${isMobileNavOpen ? 'nav-open' : ''} ${isMobileInspectorOpen ? 'inspector-open' : ''}`}>
+      <div className="nav-drawer-wrapper">
+        <ServerRail
+          currentUser={boot?.currentUser ?? null}
+          servers={boot?.servers ?? []}
+          selectedServerId={selectedServerId}
+          onSelect={(serverId) => {
+            setSelectedServerId(serverId);
+            setIsMobileNavOpen(false);
+          }}
+          onCreate={() => {
+            setServerModalOpen(true);
+            setIsMobileNavOpen(false);
+          }}
+          socketState={socketState}
+        />
 
-      <ChannelSidebar
-        workspace={boot?.workspace ?? null}
-        server={currentServer}
-        channels={serverChannels}
-        selectedChannelId={selectedChannelId}
-        onSelect={setSelectedChannelId}
-        onCreateChannel={() => setChannelModalOpen(true)}
-        activity={boot?.activity ?? []}
-        selectedServerId={selectedServerId}
-        members={boot?.members ?? []}
-        currentUser={boot?.currentUser ?? null}
-        onSelectUserDM={handleSelectUserDM}
-      />
+        <ChannelSidebar
+          workspace={boot?.workspace ?? null}
+          server={currentServer}
+          channels={serverChannels}
+          selectedChannelId={selectedChannelId}
+          onSelect={(channelId) => {
+            setSelectedChannelId(channelId);
+            setIsMobileNavOpen(false);
+          }}
+          onCreateChannel={() => {
+            setChannelModalOpen(true);
+            setIsMobileNavOpen(false);
+          }}
+          activity={boot?.activity ?? []}
+          selectedServerId={selectedServerId}
+          members={boot?.members ?? []}
+          currentUser={boot?.currentUser ?? null}
+          onSelectUserDM={async (partnerId) => {
+            await handleSelectUserDM(partnerId);
+            setIsMobileNavOpen(false);
+          }}
+          onLogout={handleLogout}
+        />
+      </div>
 
       <main className="main">
-        <div className="mobile-header">
-          <button className="chip" onClick={() => setServerModalOpen(true)}>Neue Gruppe</button>
-          <button className="chip" onClick={() => setChannelModalOpen(true)}>Kanal anlegen</button>
-        </div>
-
-        <div className="mobile-scroll">
-          {(boot?.servers ?? []).map((server) => (
-            <button
-              key={server.id}
-              className={`server-pill ${server.id === selectedServerId ? 'active' : ''}`}
-              onClick={() => setSelectedServerId(server.id)}
-            >
-              <span className="server-dot" style={{ background: server.accent }} />
-              {server.name}
-            </button>
-          ))}
-        </div>
-
         <div className="main-grid">
           <div className="topbar">
             <div className="brand">
@@ -671,14 +673,47 @@ export default function App() {
           </div>
 
           <div className="channel-header">
-            <div>
-              <div className="tiny-pill">#{currentChannel?.type === 'voice' ? 'voice-room' : currentChannel?.name ?? 'general'}</div>
-              <h3>{currentChannel?.type === 'voice' ? currentChannel.name : currentChannel?.name ?? 'Kanal auswählen'}</h3>
-              <p>{currentChannel?.topic ?? 'Wähle links eine Gruppe und einen Kanal. Text und Voice laufen lokal zusammen in einem Raum.'}</p>
+            <div className="channel-header-left">
+              <button
+                className="mobile-toggle-btn nav-toggle"
+                onClick={() => setIsMobileNavOpen(true)}
+                aria-label="Menü öffnen"
+              >
+                <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="12" x2="21" y2="12"></line>
+                  <line x1="3" y1="6" x2="21" y2="6"></line>
+                  <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+              </button>
+
+              <div className="channel-title-area">
+                <div className="channel-meta-wrapper">
+                  <div className="tiny-pill">#{currentChannel?.type === 'voice' ? 'voice-room' : currentChannel?.name ?? 'general'}</div>
+                  <span className="mobile-status-dot">
+                    <span className={`presence ${socketState === 'online' ? 'online' : socketState === 'connecting' ? 'idle' : 'offline'}`} />
+                  </span>
+                </div>
+                <h3>{currentChannel?.type === 'voice' ? currentChannel.name : currentChannel?.name ?? 'Kanal auswählen'}</h3>
+                <p className="channel-topic">{currentChannel?.topic ?? 'Wähle links eine Gruppe und einen Kanal. Text und Voice laufen lokal zusammen in einem Raum.'}</p>
+              </div>
             </div>
+
             <div className="channel-actions">
-              <button className="action secondary" onClick={() => setChannelModalOpen(true)}>Neuer Kanal</button>
-              <button className="action secondary" onClick={() => setServerModalOpen(true)}>Neue Gruppe</button>
+              <button className="action secondary desktop-only" onClick={() => setChannelModalOpen(true)}>Neuer Kanal</button>
+              <button className="action secondary desktop-only" onClick={() => setServerModalOpen(true)}>Neue Gruppe</button>
+              
+              <button
+                className="mobile-toggle-btn inspector-toggle"
+                onClick={() => setIsMobileInspectorOpen(true)}
+                aria-label="Mitglieder anzeigen"
+              >
+                <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+              </button>
             </div>
           </div>
 
@@ -704,18 +739,30 @@ export default function App() {
               onToggleReaction={handleToggleReaction}
             />
 
-            <InspectorPanel
-              server={currentServer}
-              members={currentMembers}
-              activity={boot?.activity ?? []}
-              currentUser={boot?.currentUser ?? null}
-              voiceRoom={voiceRoom}
-              currentChannel={currentChannel}
-              onChangeStatus={handleChangeStatus}
-            />
+            <div className="inspector-drawer-wrapper">
+              <InspectorPanel
+                server={currentServer}
+                members={currentMembers}
+                activity={boot?.activity ?? []}
+                currentUser={boot?.currentUser ?? null}
+                voiceRoom={voiceRoom}
+                currentChannel={currentChannel}
+                onChangeStatus={handleChangeStatus}
+              />
+            </div>
           </div>
         </div>
       </main>
+
+      {(isMobileNavOpen || isMobileInspectorOpen) && (
+        <div
+          className="drawer-backdrop"
+          onClick={() => {
+            setIsMobileNavOpen(false);
+            setIsMobileInspectorOpen(false);
+          }}
+        />
+      )}
 
       {serverModalOpen && (
         <CreateServerModal
