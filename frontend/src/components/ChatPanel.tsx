@@ -17,7 +17,7 @@ interface Props {
   onTypingChange: (isTyping: boolean) => void;
   onSearchQueryChange: (value: string) => void;
   onSendMessage: (value: string, parentId?: string | null) => Promise<void>;
-  onJoinVoice: (channelId: string) => Promise<void>;
+  onJoinVoice: (channelId: string) => Promise<VoiceRoom>;
   onLeaveVoice: (channelId: string) => Promise<void>;
   onVoiceChunk: (channelId: string, chunk: Blob, mimeType: string, speaking: boolean) => void;
   socket: any;

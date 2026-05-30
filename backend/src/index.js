@@ -265,6 +265,7 @@ io.on('connection', (socket) => {
     socket.data.channelId = channelId;
     const uid = userId ?? 'me';
     socket.data.userId = uid;
+    socket.join(`user:${uid}`);
 
     const snapshot = await loadState();
     const room = snapshot.voiceRooms[channelId];
@@ -277,6 +278,16 @@ io.on('connection', (socket) => {
       const newRoom = await joinVoiceRoom({ channelId, userId: uid });
       io.emit('voice:state', { channelId, room: newRoom });
     }
+  });
+
+  socket.on('voice:signal', ({ channelId, toUserId, fromUserId, signal }) => {
+    if (!channelId || !toUserId || !signal) return;
+    if (!socket.data.joinedChannels?.has(channelId)) return;
+    io.to(`user:${toUserId}`).emit('voice:signal', {
+      channelId,
+      fromUserId: fromUserId ?? socket.data.userId ?? 'me',
+      signal,
+    });
   });
 
   socket.on('voice:chunk', async ({ channelId, userId, chunk, mimeType, speaking = true, volume = 0 }) => {

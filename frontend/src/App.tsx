@@ -21,8 +21,8 @@ function getSocketUrl() {
   if (typeof window === 'undefined') {
     return 'http://localhost:5001';
   }
-  const isLocalDev = window.location.hostname === 'localhost' && window.location.port === '5173';
-  return isLocalDev ? 'http://localhost:5001' : window.location.origin;
+  const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  return isLocalHost ? 'http://localhost:5001' : window.location.origin;
 }
 
 interface ServerToClientEvents {
@@ -30,6 +30,7 @@ interface ServerToClientEvents {
   'voice:state': (payload: { channelId: string; room: VoiceRoom }) => void;
   'state:reset': (payload: BootstrapPayload) => void;
   'voice:chunk': (payload: { chunk: ArrayBuffer; mimeType: string; userId: string; channelId: string; volume?: number }) => void;
+  'voice:signal': (payload: { channelId: string; fromUserId: string; signal: { type: 'offer' | 'answer'; sdp: RTCSessionDescriptionInit } | { type: 'ice-candidate'; candidate: RTCIceCandidateInit } }) => void;
   'typing:update': (payload: { channelId: string; users: string[] }) => void;
   'message:update': (message: Message) => void;
   'user:status:update': (payload: { userId: string; status: Presence; activity: string; members: Member[] }) => void;
@@ -38,6 +39,7 @@ interface ServerToClientEvents {
 interface ClientToServerEvents {
   'join:channel': (payload: { channelId: string; userId: string }) => void;
   'voice:chunk': (payload: { channelId: string; userId: string; chunk: ArrayBuffer; mimeType: string; speaking: boolean; volume?: number }) => void;
+  'voice:signal': (payload: { channelId: string; toUserId: string; fromUserId: string; signal: { type: 'offer' | 'answer'; sdp: RTCSessionDescriptionInit } | { type: 'ice-candidate'; candidate: RTCIceCandidateInit } }) => void;
   'voice:stop': (payload: { channelId: string; userId: string }) => void;
   'leave:channel': (payload: { channelId: string; userId: string }) => void;
   'typing:update': (payload: { channelId: string; userId: string; isTyping: boolean }) => void;
@@ -466,7 +468,7 @@ export default function App() {
 
   const handleJoinVoice = useCallback(
     async (channelId: string) => {
-      if (!boot) return;
+      if (!boot) throw new Error('Workspace not loaded');
       const room = await joinVoiceRoom({ channelId, userId: boot.currentUser.id });
       setBoot((current) => {
         if (!current) return current;
@@ -487,6 +489,7 @@ export default function App() {
           },
         };
       }
+      return room;
     },
     [boot],
   );
