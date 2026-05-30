@@ -231,7 +231,7 @@ app.get('/api/servers/:serverId/members', async (req, res) => {
 
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(frontendDist, { extensions: ['html'] }));
-  app.get('*', (req, res, next) => {
+  app.use((req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
       next();
       return;

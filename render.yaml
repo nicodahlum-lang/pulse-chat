@@ -3,7 +3,7 @@ services:
     name: pulse-chat
     runtime: node
     plan: free
-    buildCommand: npm install && npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install
+    buildCommand: NODE_ENV=development npm install && NODE_ENV=development npm --prefix frontend install && NODE_ENV=development npm --prefix frontend run build && NODE_ENV=development npm --prefix backend install
     startCommand: npm --prefix backend start
     envVars:
       - key: NODE_ENV
