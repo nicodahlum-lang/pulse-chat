@@ -1,9 +1,11 @@
 import type { BootstrapPayload, Channel, ChannelType, Message, Server, VoiceRoom } from './types';
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const sessionToken = typeof window !== 'undefined' ? localStorage.getItem('pulse_chat_session_token') : null;
   const response = await fetch(path, {
     headers: {
       'Content-Type': 'application/json',
+      ...(sessionToken ? { 'x-session-token': sessionToken } : {}),
       ...(init?.headers ?? {}),
     },
     ...init,
@@ -20,6 +22,26 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 export function getBootstrap(userId?: string) {
   const query = userId ? `?userId=${encodeURIComponent(userId)}` : '';
   return fetchJson<BootstrapPayload>(`/api/bootstrap${query}`);
+}
+
+export function login(input: { identifier: string; password: string }) {
+  return fetchJson<{ token: string; user: any }>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function registerAccount(input: { name: string; username: string; email: string; password: string; role?: string; avatarFrom?: string; avatarTo?: string }) {
+  return fetchJson<{ token: string; user: any }>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function logout() {
+  return fetchJson<{ ok: true }>('/api/auth/logout', {
+    method: 'POST',
+  });
 }
 
 export function registerMember(input: { name: string; role: string; avatarFrom?: string; avatarTo?: string }) {

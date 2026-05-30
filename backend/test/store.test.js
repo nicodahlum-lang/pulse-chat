@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resetState, createMessage, createServer, createChannel, loadState, seededWorkspace, registerMember } from '../src/store.js';
+import { resetState, createMessage, createServer, createChannel, loadState, seededWorkspace, registerMember, loginAccount, registerAccount } from '../src/store.js';
 
 test('seeded workspace includes text and voice channels', async () => {
   const state = await resetState();
@@ -40,3 +40,27 @@ test('can register a custom member', async () => {
   assert.ok(state.members.find((m) => m.id === member.id));
 });
 
+test('can login with a seeded demo account', async () => {
+  await resetState();
+  const result = await loginAccount({ identifier: 'mara', password: 'mara1234' });
+  assert.ok(result.token);
+  assert.equal(result.user.handle, '@mara');
+});
+
+test('can register a new authenticated account', async () => {
+  await resetState();
+  const result = await registerAccount({
+    name: 'Casey',
+    username: 'casey',
+    email: 'casey@example.com',
+    password: 'secret123',
+    role: 'Guest',
+  });
+
+  assert.ok(result.token);
+  assert.equal(result.user.handle, '@casey');
+
+  const state = await loadState();
+  assert.ok(state.members.find((member) => member.id === 'casey'));
+  assert.ok(state.accounts.find((account) => account.username === 'casey'));
+});

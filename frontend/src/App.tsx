@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { createChannel, createMessage, createServer, getBootstrap, joinVoiceRoom, leaveVoiceRoom, getOrCreateDM, toggleReaction, registerMember } from './api';
+import { createChannel, createMessage, createServer, getBootstrap, joinVoiceRoom, leaveVoiceRoom, getOrCreateDM, toggleReaction, login, registerAccount, logout } from './api';
 import type { BootstrapPayload, Message, VoiceRoom, Presence, Member } from './types';
 import { ChannelSidebar } from './components/ChannelSidebar';
 import { ChatPanel } from './components/ChatPanel';
@@ -63,23 +63,21 @@ export default function App() {
   const typingTimeoutRef = useRef<number | null>(null);
   const lastTypingEmittedRef = useRef<boolean>(false);
   const lastTypingTimeRef = useRef<number>(0);
-
-  const [userId, setUserId] = useState<string | null>(localStorage.getItem('pulse_chat_user_id'));
+  const [sessionToken, setSessionToken] = useState<string | null>(() => localStorage.getItem('pulse_chat_session_token'));
 
   useEffect(() => {
     let active = true;
     setLoading(true);
 
-    getBootstrap(userId || undefined)
+    getBootstrap()
       .then((payload) => {
         if (!active) return;
         bootRef.current = payload;
         setBoot(payload);
 
-        if (userId && !payload.members.some(m => m.id === userId) && payload.currentUser.id !== userId) {
-          console.warn("User ID not found in members, clearing local selection.");
-          localStorage.removeItem('pulse_chat_user_id');
-          setUserId(null);
+        if (sessionToken && !payload.auth?.authenticated) {
+          localStorage.removeItem('pulse_chat_session_token');
+          setSessionToken(null);
         }
 
         setSelectedServerId((current) => current || payload.servers[0]?.id || '');
@@ -235,7 +233,7 @@ export default function App() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [userId]);
+  }, [sessionToken]);
 
   const currentServer = useMemo(() => boot?.servers.find((server) => server.id === selectedServerId) ?? null, [boot?.servers, selectedServerId]);
   const serverChannels = useMemo(() => {
@@ -550,6 +548,22 @@ export default function App() {
     return currentChannel.serverId !== currentServer?.id;
   }, [currentChannel, selectedServerId, currentServer?.id]);
 
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+    } catch (err) {
+      console.warn('Logout request failed, clearing session locally anyway.', err);
+    } finally {
+      localStorage.removeItem('pulse_chat_session_token');
+      setSessionToken(null);
+      bootRef.current = null;
+      setBoot(null);
+      setSelectedServerId('');
+      setSelectedChannelId('');
+      setSearchQuery('');
+    }
+  }, []);
+
   if (error) {
     return (
       <div className="login-overlay">
@@ -563,7 +577,7 @@ export default function App() {
     );
   }
 
-  if (!userId || (boot && !boot.members.some(m => m.id === userId) && boot.currentUser.id !== userId)) {
+  if (!boot?.auth?.authenticated) {
     if (loading) {
       return (
         <div className="login-overlay">
@@ -577,14 +591,16 @@ export default function App() {
     }
     return (
       <LoginModal
-        members={boot?.members ?? []}
-        onLogin={(id) => {
-          localStorage.setItem('pulse_chat_user_id', id);
-          setUserId(id);
+        workspaceName={boot?.workspace.name ?? 'Pulse Chat'}
+        onLogin={async (input) => {
+          const res = await login(input);
+          localStorage.setItem('pulse_chat_session_token', res.token);
+          setSessionToken(res.token);
         }}
         onRegister={async (input) => {
-          const res = await registerMember(input);
-          return res.id;
+          const res = await registerAccount(input);
+          localStorage.setItem('pulse_chat_session_token', res.token);
+          setSessionToken(res.token);
         }}
       />
     );
@@ -645,11 +661,12 @@ export default function App() {
             </div>
             <div className="toolbar">
               <span className="status-pill">
-                <span className={`presence ${socketState === 'online' ? 'online' : socketState === 'connecting' ? 'idle' : 'offline'}`} />
-                {socketState === 'online' ? 'Verbunden' : socketState === 'connecting' ? 'Verbindet …' : 'Offline'}
+              <span className={`presence ${socketState === 'online' ? 'online' : socketState === 'connecting' ? 'idle' : 'offline'}`} />
+              {socketState === 'online' ? 'Verbunden' : socketState === 'connecting' ? 'Verbindet …' : 'Offline'}
               </span>
               <button className="action secondary" onClick={() => setChannelModalOpen(true)}>Kanal</button>
               <button className="action" onClick={() => setServerModalOpen(true)}>Gruppe</button>
+              <button className="action secondary" onClick={() => void handleLogout()}>Abmelden</button>
             </div>
           </div>
 

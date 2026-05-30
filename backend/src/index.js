@@ -10,12 +10,15 @@ import {
   createMessage,
   createServer,
   getChannelMap,
-  getPublicState,
+  getBootstrapState,
   getMemberMap,
   joinVoiceRoom,
   loadState,
   leaveVoiceRoom,
   removeVoiceParticipant,
+  loginAccount,
+  logoutAccount,
+  registerAccount,
   resetState,
   sanitizeText,
   setVoiceSpeaker,
@@ -31,6 +34,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const frontendDist = path.resolve(__dirname, '../../frontend/dist');
 const typingByChannel = new Map();
+
+function getSessionToken(req) {
+  const bearer = req.header('authorization');
+  if (bearer?.startsWith('Bearer ')) {
+    return bearer.slice(7).trim();
+  }
+  return req.header('x-session-token')?.trim() ?? '';
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -51,28 +62,12 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/bootstrap', async (req, res) => {
   const snapshot = await loadState();
-  const userId = req.query.userId;
-  const pub = getPublicState(snapshot);
-  if (userId) {
-    const member = snapshot.members.find((m) => m.id === userId);
-    if (member) {
-      pub.currentUser = member;
-    }
-  }
-  res.json(pub);
+  res.json(getBootstrapState(snapshot, { sessionToken: getSessionToken(req), legacyUserId: req.query.userId }));
 });
 
 app.get('/api/state', async (req, res) => {
   const snapshot = await loadState();
-  const userId = req.query.userId;
-  const pub = getPublicState(snapshot);
-  if (userId) {
-    const member = snapshot.members.find((m) => m.id === userId);
-    if (member) {
-      pub.currentUser = member;
-    }
-  }
-  res.json(pub);
+  res.json(getBootstrapState(snapshot, { sessionToken: getSessionToken(req), legacyUserId: req.query.userId }));
 });
 
 app.post('/api/register', async (req, res) => {
@@ -85,6 +80,45 @@ app.post('/api/register', async (req, res) => {
     if (!name) throw new Error('Name is required');
     const member = await registerMember({ name, role, avatarFrom, avatarTo });
     res.status(201).json(member);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const result = await registerAccount({
+      name: sanitizeText(req.body?.name, 42),
+      username: sanitizeText(req.body?.username, 32),
+      email: sanitizeText(req.body?.email, 120),
+      password: String(req.body?.password ?? ''),
+      role: sanitizeText(req.body?.role, 32),
+      avatarFrom: sanitizeText(req.body?.avatarFrom, 24),
+      avatarTo: sanitizeText(req.body?.avatarTo, 24),
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const result = await loginAccount({
+      identifier: sanitizeText(req.body?.identifier, 120),
+      password: String(req.body?.password ?? ''),
+    });
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(401).json({ error: error.message });
+  }
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const token = getSessionToken(req);
+    await logoutAccount(token);
+    res.status(200).json({ ok: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

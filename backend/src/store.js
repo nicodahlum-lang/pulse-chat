@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import pg from 'pg';
 
 let pool = null;
@@ -97,6 +97,8 @@ const defaultWorkspace = {
     { id: 'tom', name: 'Tom', handle: '@tom', role: 'Community', status: 'online', serverId: 'midnight-guild', activity: 'moderiert den Abendraum' },
     { id: 'jules', name: 'Jules', handle: '@jules', role: 'Ops', status: 'offline', serverId: 'orbit-hq', activity: 'hat den letzten Huddle archiviert' },
   ],
+  accounts: [],
+  sessions: {},
   messages: [
     {
       id: 'msg-1',
@@ -169,6 +171,10 @@ const defaultWorkspace = {
 
 let state = null;
 let writeQueue = Promise.resolve();
+const DEMO_CREDENTIALS = [
+  { memberId: 'mara', username: 'mara', email: 'mara@pulse.chat', password: 'mara1234' },
+  { memberId: 'leo', username: 'leo', email: 'leo@pulse.chat', password: 'leo1234' },
+];
 
 function clone(value) {
   return structuredClone(value);
@@ -186,6 +192,21 @@ function compactId(prefix) {
   return `${prefix}-${randomUUID().slice(0, 8)}`;
 }
 
+function createPasswordDigest(password, salt = randomBytes(16).toString('hex')) {
+  const hash = scryptSync(String(password), salt, 64).toString('hex');
+  return { salt, hash };
+}
+
+function verifyPassword(password, salt, expectedHash) {
+  try {
+    const actualHash = scryptSync(String(password), salt, 64);
+    const expectedBuffer = Buffer.from(String(expectedHash), 'hex');
+    return actualHash.length === expectedBuffer.length && timingSafeEqual(actualHash, expectedBuffer);
+  } catch {
+    return false;
+  }
+}
+
 function normalizeMessageContent(content) {
   return String(content ?? '').trim().replace(/\s+/g, ' ');
 }
@@ -195,7 +216,142 @@ function ensureDataDir() {
 }
 
 function ensureSeedState() {
-  return clone(defaultWorkspace);
+  const snapshot = clone(defaultWorkspace);
+  snapshot.accounts = DEMO_CREDENTIALS.map((credential) => {
+    const { salt, hash } = createPasswordDigest(credential.password);
+    return {
+      id: `account-${credential.memberId}`,
+      memberId: credential.memberId,
+      username: credential.username,
+      email: credential.email,
+      passwordSalt: salt,
+      passwordHash: hash,
+      isDemo: true,
+      createdAt: new Date().toISOString(),
+    };
+  });
+  snapshot.sessions = {};
+  return snapshot;
+}
+
+function ensureMemberAvatar(member) {
+  if (member.avatar) {
+    return member;
+  }
+
+  const label = (member.name ?? member.handle ?? member.id ?? '?').trim().charAt(0).toUpperCase() || '?';
+  const seed = String(member.handle ?? member.id ?? member.name ?? '');
+  const palette = [
+    ['#9b8cff', '#4dd6ff'],
+    ['#34d399', '#3b82f6'],
+    ['#f59e0b', '#e11d48'],
+    ['#ec4899', '#8b5cf6'],
+    ['#10b981', '#059669'],
+  ];
+  const index = Array.from(seed).reduce((sum, char) => sum + char.charCodeAt(0), 0) % palette.length;
+  const [from, to] = palette[index];
+  return {
+    ...member,
+    avatar: {
+      type: 'gradient',
+      from,
+      to,
+      label,
+    },
+  };
+}
+
+function normalizeAccount(account) {
+  return {
+    ...account,
+    username: sanitizeText(account.username, 64).toLowerCase(),
+    email: sanitizeText(account.email, 120).toLowerCase(),
+  };
+}
+
+function normalizeState(snapshot) {
+  const next = clone(snapshot ?? ensureSeedState());
+  next.members = Array.isArray(next.members) ? next.members.map((member) => ensureMemberAvatar(member)) : [];
+  next.accounts = Array.isArray(next.accounts) ? next.accounts.map((account) => normalizeAccount(account)) : [];
+  next.sessions = next.sessions && typeof next.sessions === 'object' && !Array.isArray(next.sessions) ? next.sessions : {};
+  if (!next.accounts.length) {
+    next.accounts = clone(ensureSeedState().accounts);
+  }
+  next.currentUser = ensureMemberAvatar(next.currentUser ?? defaultWorkspace.currentUser);
+  return next;
+}
+
+function getMemberByAccount(snapshot, account) {
+  return snapshot.members.find((member) => member.id === account.memberId) ?? null;
+}
+
+function findAccountByIdentifier(snapshot, identifier) {
+  const normalized = sanitizeText(identifier, 120).toLowerCase();
+  const stripped = normalized.startsWith('@') ? normalized.slice(1) : normalized;
+  return snapshot.accounts.find((account) => (
+    account.username === stripped ||
+    account.email === normalized ||
+    account.memberId === stripped
+  )) ?? null;
+}
+
+function createSession(snapshot, accountId) {
+  const token = randomUUID().replace(/-/g, '');
+  snapshot.sessions[token] = {
+    accountId,
+    createdAt: new Date().toISOString(),
+  };
+  return token;
+}
+
+function getSessionTokenFromRequest(req) {
+  const bearer = req.header('authorization');
+  if (bearer?.startsWith('Bearer ')) {
+    return sanitizeText(bearer.slice(7), 128);
+  }
+  return sanitizeText(req.header('x-session-token') || req.query?.token, 128);
+}
+
+function resolveAuthenticatedMember(snapshot, token) {
+  if (!token) {
+    return null;
+  }
+
+  const session = snapshot.sessions[token];
+  if (!session) {
+    return null;
+  }
+
+  const account = snapshot.accounts.find((entry) => entry.id === session.accountId);
+  if (!account) {
+    return null;
+  }
+
+  const member = getMemberByAccount(snapshot, account);
+  if (!member) {
+    return null;
+  }
+
+  return {
+    token,
+    account,
+    member,
+  };
+}
+
+function buildAuthSnapshot(snapshot, token, legacyUserId) {
+  const authenticated = resolveAuthenticatedMember(snapshot, token);
+  const legacyMember = !authenticated && legacyUserId
+    ? snapshot.members.find((member) => member.id === legacyUserId) ?? null
+    : null;
+  const currentUser = authenticated?.member ?? legacyMember ?? snapshot.currentUser;
+  return {
+    currentUser,
+    auth: {
+      authenticated: Boolean(authenticated),
+      userId: authenticated?.member.id ?? null,
+    },
+  };
 }
 
 async function readStateFile() {
@@ -217,7 +373,7 @@ export async function loadState() {
       await ensureDbSchema();
       const res = await pool.query('SELECT state FROM pulse_chat_state WHERE id = 1');
       if (res.rows.length > 0) {
-        state = JSON.parse(res.rows[0].state);
+        state = normalizeState(JSON.parse(res.rows[0].state));
         return state;
       } else {
         state = ensureSeedState();
@@ -231,12 +387,12 @@ export async function loadState() {
   }
 
   const persisted = await readStateFile();
-  state = persisted ?? ensureSeedState();
+  state = normalizeState(persisted ?? ensureSeedState());
   return state;
 }
 
 export async function saveState(nextState) {
-  state = clone(nextState);
+  state = normalizeState(nextState);
   const json = JSON.stringify(state);
 
   if (pool) {
@@ -442,16 +598,27 @@ export function getMemberMap(snapshot) {
 }
 
 export function getPublicState(snapshot) {
+  const normalized = normalizeState(snapshot);
   return {
-    workspace: snapshot.workspace,
-    currentUser: snapshot.currentUser,
-    servers: snapshot.servers,
-    channels: snapshot.channels,
-    members: snapshot.members,
-    messages: snapshot.messages,
-    voiceRooms: snapshot.voiceRooms,
-    activity: snapshot.activity,
-    settings: snapshot.settings,
+    workspace: normalized.workspace,
+    currentUser: normalized.currentUser,
+    servers: normalized.servers,
+    channels: normalized.channels,
+    members: normalized.members,
+    messages: normalized.messages,
+    voiceRooms: normalized.voiceRooms,
+    activity: normalized.activity,
+    settings: normalized.settings,
+  };
+}
+
+export function getBootstrapState(snapshot, { sessionToken, legacyUserId } = {}) {
+  const normalized = normalizeState(snapshot);
+  const authState = buildAuthSnapshot(normalized, sessionToken, legacyUserId);
+  return {
+    ...getPublicState(normalized),
+    currentUser: authState.currentUser,
+    auth: authState.auth,
   };
 }
 
@@ -574,5 +741,104 @@ export async function registerMember(input) {
   return member;
 }
 
-export { defaultWorkspace as seededWorkspace };
+export async function registerAccount(input) {
+  const snapshot = await loadState();
+  const name = sanitizeText(input.name, 42) || 'Gast';
+  const role = sanitizeText(input.role, 32) || 'Gast';
+  const username = sanitizeText(input.username ?? '', 32).toLowerCase() || slugify(name);
+  const email = sanitizeText(input.email, 120).toLowerCase();
+  const password = String(input.password ?? '');
 
+  if (!email.includes('@')) {
+    throw new Error('Email is required');
+  }
+  if (password.length < 6) {
+    throw new Error('Password must be at least 6 characters long');
+  }
+  if (snapshot.accounts.some((account) => account.email === email || account.username === username)) {
+    throw new Error('An account with this email or username already exists');
+  }
+
+  const memberId = snapshot.members.some((member) => member.id === username) ? compactId('user') : username;
+  const handle = `@${memberId}`;
+  const member = {
+    id: memberId,
+    name,
+    handle,
+    role,
+    status: 'online',
+    serverId: 'orbit-hq',
+    activity: 'hat sich registriert',
+    avatar: input.avatarFrom && input.avatarTo
+      ? {
+          type: 'gradient',
+          from: sanitizeText(input.avatarFrom, 24),
+          to: sanitizeText(input.avatarTo, 24),
+          label: name.charAt(0).toUpperCase() || '?',
+        }
+      : undefined,
+  };
+
+  const { salt, hash } = createPasswordDigest(password);
+  const account = {
+    id: `account-${member.id}`,
+    memberId: member.id,
+    username,
+    email,
+    passwordSalt: salt,
+    passwordHash: hash,
+    isDemo: false,
+    createdAt: new Date().toISOString(),
+  };
+
+  snapshot.members.push(ensureMemberAvatar(member));
+  snapshot.accounts.push(account);
+  const token = createSession(snapshot, account.id);
+  pushActivity(snapshot, {
+    id: compactId('act'),
+    type: 'server',
+    title: `${member.name} ist beigetreten`,
+    detail: `Neues Konto ${account.username} wurde erstellt`,
+    time: 'Gerade eben',
+  });
+  await saveState(snapshot);
+
+  return {
+    token,
+    user: ensureMemberAvatar(member),
+  };
+}
+
+export async function loginAccount(input) {
+  const snapshot = await loadState();
+  const identifier = sanitizeText(input.identifier, 120);
+  const password = String(input.password ?? '');
+  const account = findAccountByIdentifier(snapshot, identifier);
+
+  if (!account || !verifyPassword(password, account.passwordSalt, account.passwordHash)) {
+    throw new Error('Invalid login credentials');
+  }
+
+  const member = getMemberByAccount(snapshot, account);
+  if (!member) {
+    throw new Error('Account profile not found');
+  }
+
+  const token = createSession(snapshot, account.id);
+  await saveState(snapshot);
+  return {
+    token,
+    user: ensureMemberAvatar(member),
+  };
+}
+
+export async function logoutAccount(token) {
+  const snapshot = await loadState();
+  if (token && snapshot.sessions[token]) {
+    delete snapshot.sessions[token];
+    await saveState(snapshot);
+  }
+  return { ok: true };
+}
+
+export { defaultWorkspace as seededWorkspace };

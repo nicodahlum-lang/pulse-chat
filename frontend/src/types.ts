@@ -79,6 +79,10 @@ export interface ActivityItem {
 export interface BootstrapPayload {
   workspace: Workspace;
   currentUser: CurrentUser;
+  auth?: {
+    authenticated: boolean;
+    userId: string | null;
+  };
   servers: Server[];
   channels: Channel[];
   members: Member[];

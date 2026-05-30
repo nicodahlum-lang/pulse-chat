@@ -1,46 +1,60 @@
-import { useState, useMemo } from 'react';
-import type { Member } from '../types';
+import { useState, type FormEvent } from 'react';
 
 interface Props {
-  members: Member[];
-  onLogin: (userId: string) => void;
-  onRegister: (input: { name: string; role: string; avatarFrom?: string; avatarTo?: string }) => Promise<string>;
+  workspaceName: string;
+  onLogin: (input: { identifier: string; password: string }) => Promise<void>;
+  onRegister: (input: { name: string; username: string; email: string; password: string; role: string }) => Promise<void>;
 }
 
-const PRESET_GRADIENTS = [
-  { from: '#9b8cff', to: '#4dd6ff' },
-  { from: '#34d399', to: '#3b82f6' },
-  { from: '#f59e0b', to: '#e11d48' },
-  { from: '#ec4899', to: '#8b5cf6' },
-  { from: '#10b981', to: '#059669' },
+const DEMO_ACCOUNTS = [
+  { label: 'Mara', identifier: 'mara', password: 'mara1234' },
+  { label: 'Leo', identifier: 'leo', password: 'leo1234' },
 ];
 
-export function LoginModal({ members, onLogin, onRegister }: Props) {
-  const [tab, setTab] = useState<'select' | 'create'>('select');
+export function LoginModal({ workspaceName, onLogin, onRegister }: Props) {
+  const [tab, setTab] = useState<'login' | 'register'>('login');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
-  const [gradientIdx, setGradientIdx] = useState(0);
+  const [registerPassword, setRegisterPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const activeGradient = PRESET_GRADIENTS[gradientIdx];
-
-  const handleCreateProfile = async (e: React.FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
     setError(null);
     setIsSubmitting(true);
 
     try {
-      const newUserId = await onRegister({
-        name: name.trim(),
-        role: role.trim() || 'Gast',
-        avatarFrom: activeGradient.from,
-        avatarTo: activeGradient.to,
+      await onLogin({
+        identifier: identifier.trim(),
+        password,
       });
-      onLogin(newUserId);
     } catch (err: any) {
-      setError(err.message ?? 'Fehler beim Erstellen des Profils.');
+      setError(err.message ?? 'Login fehlgeschlagen.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRegister = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      await onRegister({
+        name: name.trim(),
+        username: username.trim(),
+        email: email.trim(),
+        password: registerPassword,
+        role: role.trim() || 'Mitglied',
+      });
+    } catch (err: any) {
+      setError(err.message ?? 'Registrierung fehlgeschlagen.');
     } finally {
       setIsSubmitting(false);
     }
@@ -52,113 +66,165 @@ export function LoginModal({ members, onLogin, onRegister }: Props) {
         <div className="login-header">
           <div className="brand-mark">P</div>
           <h2>Pulse Chat</h2>
-          <p className="helper">Gruppen, Kanäle und Voice-Räume für dein Team.</p>
+          <p className="helper">{workspaceName}</p>
         </div>
 
         <div className="login-tabs">
           <button
-            className={`login-tab ${tab === 'select' ? 'active' : ''}`}
-            onClick={() => { setTab('select'); setError(null); }}
+            className={`login-tab ${tab === 'login' ? 'active' : ''}`}
+            onClick={() => {
+              setTab('login');
+              setError(null);
+            }}
           >
-            Profil wählen
+            Anmelden
           </button>
           <button
-            className={`login-tab ${tab === 'create' ? 'active' : ''}`}
-            onClick={() => { setTab('create'); setError(null); }}
+            className={`login-tab ${tab === 'register' ? 'active' : ''}`}
+            onClick={() => {
+              setTab('register');
+              setError(null);
+            }}
           >
-            Neu registrieren
+            Konto erstellen
           </button>
         </div>
 
         {error && <div className="login-error">{error}</div>}
 
-        {tab === 'select' ? (
-          <div className="login-select-section">
-            <p className="helper" style={{ marginBottom: '16px' }}>
-              Wähle ein bestehendes Teammitglied aus, um als diese Person beizutreten:
-            </p>
-            <div className="login-members-grid">
-              {members.map((member) => {
-                const label = member.name.charAt(0).toUpperCase();
-                // Preset matching color to make it look premium
-                const fromColor = member.id === 'mara' ? '#9b8cff' : member.id === 'leo' ? '#3b82f6' : member.id === 'nina' ? '#ec4899' : member.id === 'tom' ? '#f59e0b' : '#10b981';
-                const toColor = member.id === 'mara' ? '#4dd6ff' : member.id === 'leo' ? '#45e19c' : member.id === 'nina' ? '#8b5cf6' : member.id === 'tom' ? '#ff6e8f' : '#059669';
-
-                return (
-                  <button
-                    key={member.id}
-                    className="login-member-btn"
-                    onClick={() => onLogin(member.id)}
-                  >
-                    <div
-                      className="login-avatar"
-                      style={{
-                        background: `linear-gradient(135deg, ${fromColor}, ${toColor})`,
-                      }}
-                    >
-                      {label}
-                    </div>
-                    <div className="login-member-info">
-                      <strong>{member.name}</strong>
-                      <span>{member.handle}</span>
-                      <small>{member.role}</small>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <form onSubmit={handleCreateProfile} className="login-form">
+        {tab === 'login' ? (
+          <form onSubmit={handleLogin} className="login-form">
             <div className="field">
-              <label htmlFor="login-name">Dein Name</label>
+              <label htmlFor="login-identifier">E-Mail oder Benutzername</label>
               <input
-                id="login-name"
+                id="login-identifier"
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="z.B. Alex"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="z.B. mara oder mara@pulse.chat"
                 required
-                maxLength={42}
+                autoComplete="username"
               />
             </div>
 
             <div className="field">
-              <label htmlFor="login-role">Deine Rolle / Tätigkeit</label>
+              <label htmlFor="login-password">Passwort</label>
               <input
-                id="login-role"
-                type="text"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                placeholder="z.B. Gast oder Entwickler"
-                maxLength={32}
+                id="login-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Dein Passwort"
+                required
+                autoComplete="current-password"
               />
-            </div>
-
-            <div className="field">
-              <label>Avatar-Farbe</label>
-              <div className="avatar-preset-row">
-                {PRESET_GRADIENTS.map((gradient, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className={`avatar-preset-btn ${gradientIdx === idx ? 'active' : ''}`}
-                    style={{
-                      background: `linear-gradient(135deg, ${gradient.from}, ${gradient.to})`,
-                    }}
-                    onClick={() => setGradientIdx(idx)}
-                    aria-label={`Farbe ${idx + 1}`}
-                  />
-                ))}
-              </div>
             </div>
 
             <button
               type="submit"
               className="action login-submit-btn"
-              disabled={isSubmitting || !name.trim()}
+              disabled={isSubmitting || !identifier.trim() || !password}
             >
-              {isSubmitting ? 'Verbindet ...' : 'Pulse Chat beitreten'}
+              {isSubmitting ? 'Melde an ...' : 'Anmelden'}
+            </button>
+
+            <div className="login-demo-box">
+              <strong>Demo-Zugänge</strong>
+              <div className="login-demo-list">
+                {DEMO_ACCOUNTS.map((account) => (
+                  <button
+                    key={account.identifier}
+                    type="button"
+                    className="login-demo-chip"
+                    onClick={() => {
+                      setIdentifier(account.identifier);
+                      setPassword(account.password);
+                      setTab('login');
+                    }}
+                  >
+                    <span>{account.label}</span>
+                    <small>{account.identifier} / {account.password}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleRegister} className="login-form">
+            <div className="field">
+              <label htmlFor="register-name">Name</label>
+              <input
+                id="register-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="z.B. Alex"
+                required
+                autoComplete="name"
+                maxLength={42}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="register-username">Benutzername</label>
+              <input
+                id="register-username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="z.B. alex"
+                required
+                autoComplete="username"
+                maxLength={32}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="register-email">E-Mail</label>
+              <input
+                id="register-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="z.B. alex@firma.de"
+                required
+                autoComplete="email"
+                maxLength={120}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="register-role">Rolle</label>
+              <input
+                id="register-role"
+                type="text"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                placeholder="z.B. Gast oder Teammitglied"
+                autoComplete="organization-title"
+                maxLength={32}
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="register-password">Passwort</label>
+              <input
+                id="register-password"
+                type="password"
+                value={registerPassword}
+                onChange={(e) => setRegisterPassword(e.target.value)}
+                placeholder="Mindestens 6 Zeichen"
+                required
+                autoComplete="new-password"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="action login-submit-btn"
+              disabled={isSubmitting || !name.trim() || !username.trim() || !email.trim() || !registerPassword}
+            >
+              {isSubmitting ? 'Konto wird angelegt ...' : 'Konto erstellen'}
             </button>
           </form>
         )}
