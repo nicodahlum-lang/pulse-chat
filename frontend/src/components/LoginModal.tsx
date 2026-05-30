@@ -77,7 +77,7 @@ export function LoginModal({ workspaceName, onLogin, onRegister }: Props) {
               setError(null);
             }}
           >
-            Anmelden
+            Login
           </button>
           <button
             className={`login-tab ${tab === 'register' ? 'active' : ''}`}
@@ -125,7 +125,7 @@ export function LoginModal({ workspaceName, onLogin, onRegister }: Props) {
               className="action login-submit-btn"
               disabled={isSubmitting || !identifier.trim() || !password}
             >
-              {isSubmitting ? 'Melde an ...' : 'Anmelden'}
+              {isSubmitting ? 'Melde an ...' : 'Login'}
             </button>
 
             <div className="login-demo-box">
