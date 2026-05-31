@@ -379,8 +379,12 @@ export async function saveState(nextState) {
   await ensureDataDir();
   const jsonFormatted = JSON.stringify(state, null, 2);
   writeQueue = writeQueue.then(async () => {
-    await writeFile(tempFile, jsonFormatted, 'utf8');
-    await rename(tempFile, stateFile);
+    try {
+      await writeFile(tempFile, jsonFormatted, 'utf8');
+      await rename(tempFile, stateFile);
+    } catch (error) {
+      console.error('Failed to write state file:', error);
+    }
   });
   return writeQueue;
 }

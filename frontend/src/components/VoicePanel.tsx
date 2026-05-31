@@ -22,6 +22,7 @@ function VoicePanelComponent({ channel, currentUser, voiceRoom, members, socket,
   const recorderRef = useRef<MediaRecorder | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
@@ -147,6 +148,7 @@ function VoicePanelComponent({ channel, currentUser, voiceRoom, members, socket,
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       const audioCtx = new AudioContextClass();
+      audioContextRef.current = audioCtx;
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 128;
@@ -181,6 +183,12 @@ function VoicePanelComponent({ channel, currentUser, voiceRoom, members, socket,
       animationFrameRef.current = null;
     }
     analyserRef.current = null;
+    if (audioContextRef.current) {
+      void audioContextRef.current.close().catch((err) => {
+        console.warn('Failed to close visualizer AudioContext:', err);
+      });
+      audioContextRef.current = null;
+    }
     setLevel(0);
   }
 

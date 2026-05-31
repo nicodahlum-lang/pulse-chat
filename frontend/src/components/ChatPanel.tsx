@@ -68,9 +68,33 @@ function ChatPanelComponent(props: Props) {
     return () => clearTimeout(timer);
   }, [localSearch, onSearchQueryChange]);
 
+  // Keep track of the current channel and message count to optimize scrolling behavior
+  const prevChannelIdRef = useRef<string | undefined>(undefined);
+  const prevMessagesLengthRef = useRef<number>(0);
+
   useEffect(() => {
-    messageRef.current?.scrollTo({ top: messageRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length, channel?.id]);
+    const container = messageRef.current;
+    if (!container) return;
+
+    const channelChanged = prevChannelIdRef.current !== channel?.id;
+    
+    if (channelChanged) {
+      // Snap instantly to the bottom on channel switch
+      container.scrollTop = container.scrollHeight;
+    } else if (messages.length > prevMessagesLengthRef.current) {
+      // Smooth scroll only if the user is already near the bottom or sent the last message
+      const lastMessage = messages[messages.length - 1];
+      const lastMessageByMe = lastMessage && currentUser && lastMessage.userId === currentUser.id;
+      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
+
+      if (isNearBottom || lastMessageByMe) {
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      }
+    }
+
+    prevChannelIdRef.current = channel?.id;
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages, channel?.id, currentUser?.id]);
 
   // Clean up Object URL to prevent memory leaks when preview changes or component unmounts
   useEffect(() => {
