@@ -109,7 +109,9 @@ function VoicePanelComponent({ channel, currentUser, voiceRoom, members, socket,
   }, [onLeaveVoice]);
 
   useEffect(() => {
+    console.log('[VoicePanel] cleanup effect registered for channel.id:', channel.id);
     return () => {
+      console.log('[VoicePanel] cleanup effect running for channel.id:', channel.id, 'joined:', joinedVoiceRef.current);
       if (joinedVoiceRef.current) {
         void onLeaveVoiceRef.current(channel.id).catch((error) => {
           console.warn('Failed to leave voice room during cleanup:', error);
@@ -292,11 +294,14 @@ function VoicePanelComponent({ channel, currentUser, voiceRoom, members, socket,
   }, [connectToPeers, currentUser?.id, recording, voiceMode, voiceRoom.participants]);
 
   async function startLegacyPushToTalk() {
+    console.log('[VoicePanel] startLegacyPushToTalk called');
     try {
       setMicError(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localStreamRef.current = stream;
+      console.log('[VoicePanel] microphone stream acquired, joining via HTTP...');
       await onJoinVoice(channel.id);
+      console.log('[VoicePanel] joined voice channel successfully via HTTP');
       joinedVoiceRef.current = true;
       socket?.emit('join:channel', { channelId: channel.id, userId: currentUser?.id ?? 'me' });
 
@@ -344,17 +349,21 @@ function VoicePanelComponent({ channel, currentUser, voiceRoom, members, socket,
       setVoiceMode('legacy');
       setRecording(true);
     } catch (error) {
+      console.error('[VoicePanel] startLegacyPushToTalk error:', error);
       stopAllAudio();
       setMicError(error instanceof Error ? error.message : 'Mikrofon konnte nicht gestartet werden.');
     }
   }
 
   async function startWebRTCVoice() {
+    console.log('[VoicePanel] startWebRTCVoice called');
     try {
       setMicError(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localStreamRef.current = stream;
+      console.log('[VoicePanel] microphone stream acquired, joining via HTTP...');
       const joinedRoom = await onJoinVoice(channel.id);
+      console.log('[VoicePanel] joined voice channel successfully via HTTP, joinedRoom:', joinedRoom);
       joinedVoiceRef.current = true;
       socket?.emit('join:channel', { channelId: channel.id, userId: currentUser?.id ?? 'me' });
       setupAnalyzer(stream);
@@ -362,6 +371,7 @@ function VoicePanelComponent({ channel, currentUser, voiceRoom, members, socket,
       setRecording(true);
       await connectToPeers(joinedRoom.participants.filter((participantId) => participantId !== currentUser?.id));
     } catch (error) {
+      console.error('[VoicePanel] startWebRTCVoice error:', error);
       stopAllAudio();
       setMicError(error instanceof Error ? error.message : 'Mikrofon konnte nicht gestartet werden.');
     }
@@ -376,6 +386,7 @@ function VoicePanelComponent({ channel, currentUser, voiceRoom, members, socket,
   }
 
   async function stopVoice() {
+    console.log('[VoicePanel] stopVoice called manually');
     try {
       await onLeaveVoice(channel.id);
       joinedVoiceRef.current = false;
