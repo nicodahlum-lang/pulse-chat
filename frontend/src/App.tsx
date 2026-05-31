@@ -439,9 +439,10 @@ export default function App() {
   );
 
   const handleToggleReaction = useCallback(async (messageId: string, emoji: string) => {
-    if (!boot) return;
+    const currentBoot = bootRef.current;
+    if (!currentBoot) return;
     try {
-      const updated = await toggleReaction(messageId, emoji, boot.currentUser.id);
+      const updated = await toggleReaction(messageId, emoji, currentBoot.currentUser.id);
       setBoot((current) => {
         if (!current) return current;
         return {
@@ -458,12 +459,13 @@ export default function App() {
     } catch (err) {
       console.error('Failed to toggle reaction', err);
     }
-  }, [boot]);
+  }, []);
 
   const handleSelectUserDM = useCallback(async (partnerId: string) => {
-    if (!boot) return;
+    const currentBoot = bootRef.current;
+    if (!currentBoot) return;
     try {
-      const channel = await getOrCreateDM(boot.currentUser.id, partnerId);
+      const channel = await getOrCreateDM(currentBoot.currentUser.id, partnerId);
       setBoot((current) => {
         if (!current) return current;
         if (current.channels.some((c) => c.id === channel.id)) return current;
@@ -482,17 +484,18 @@ export default function App() {
     } catch (err) {
       console.error('Failed to open DM channel', err);
     }
-  }, [boot]);
+  }, []);
 
   const handleChangeStatus = useCallback((status: Presence, activity: string) => {
     const socket = socketRef.current;
-    if (!socket || !boot) return;
+    const currentBoot = bootRef.current;
+    if (!socket || !currentBoot) return;
     socket.emit('user:status:update' as any, {
-      userId: boot.currentUser.id,
+      userId: currentBoot.currentUser.id,
       status,
       activity,
     });
-  }, [boot]);
+  }, []);
 
   const handleCreateServer = useCallback(async (input: { name: string; icon: string; accent: string; description: string }) => {
     const created = await createServer(input);
@@ -599,12 +602,13 @@ export default function App() {
   const handleVoiceChunk = useCallback(
     (channelId: string, chunk: Blob, mimeType: string, speaking: boolean, volume?: number) => {
       const socket = socketRef.current;
-      if (!socket || !boot) return;
+      const currentBoot = bootRef.current;
+      if (!socket || !currentBoot) return;
       selectedChannelRef.current = channelId;
       chunk.arrayBuffer().then((buffer) => {
         socket.emit('voice:chunk', {
           channelId,
-          userId: boot.currentUser.id,
+          userId: currentBoot.currentUser.id,
           chunk: buffer,
           mimeType,
           speaking,
@@ -612,7 +616,7 @@ export default function App() {
         });
       });
     },
-    [boot],
+    [],
   );
 
   const channelMismatch = useMemo(() => {

@@ -363,10 +363,22 @@ io.on('connection', (socket) => {
   socket.on('disconnect', async () => {
     const userId = socket.data.userId ?? 'me';
     const joinedChannels = Array.from(socket.data.joinedChannels ?? []);
-    for (const channelId of joinedChannels) {
-      const room = await removeVoiceParticipant(channelId, userId);
-      io.emit('voice:state', { channelId, room });
-    }
+
+    // Grace period of 3 seconds to prevent immediately removing a user on temporary network drop
+    // or when the socket upgrades from polling to websocket transport.
+    setTimeout(async () => {
+      // Check if user has reconnected on any other active socket
+      const allSockets = Array.from(io.sockets.sockets.values());
+      const isConnectedNow = allSockets.some(s => (s.data.userId ?? 'me') === userId);
+      
+      if (!isConnectedNow) {
+        for (const channelId of joinedChannels) {
+          const room = await removeVoiceParticipant(channelId, userId);
+          io.emit('voice:state', { channelId, room });
+        }
+      }
+    }, 3000);
+
     for (const channelId of joinedChannels) {
       clearTyping(channelId, userId);
     }
