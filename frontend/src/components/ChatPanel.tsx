@@ -50,7 +50,10 @@ function ChatPanelComponent(props: Props) {
   const [draft, setDraft] = useState('');
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [replyingToMessage, setReplyingToMessage] = useState<Message | null>(null);
-  const [attachedFile, setAttachedFile] = useState<Attachment | null>(null);
+  
+  // Optimized attachment state: Storing raw File pointer and temporary Object URL preview
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
@@ -69,33 +72,46 @@ function ChatPanelComponent(props: Props) {
     messageRef.current?.scrollTo({ top: messageRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages.length, channel?.id]);
 
+  // Clean up Object URL to prevent memory leaks when preview changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
   const speakerNames = useMemo(() => {
     return voiceRoom.participants
       .map((participantId) => members.find((member) => member.id === participantId)?.name ?? participantId)
       .join(' · ');
   }, [members, voiceRoom.participants]);
 
+  const handleRemoveAttachment = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    setAttachedFile(null);
+  };
+
   const processFile = (file: File) => {
     if (file.size > 5 * 1024 * 1024) {
       alert('Datei ist zu groß! Maximale Dateigröße ist 5 MB.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      if (dataUrl) {
-        setAttachedFile({
-          name: file.name,
-          size: file.size,
-          type: file.type || 'application/octet-stream',
-          dataUrl,
-        });
-      }
-    };
-    reader.onerror = () => {
-      alert('Fehler beim Lesen der Datei.');
-    };
-    reader.readAsDataURL(file);
+    
+    // Revoke previous url if any
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+
+    if (file.type.startsWith('image/')) {
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+    }
+    setAttachedFile(file);
   };
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -142,10 +158,33 @@ function ChatPanelComponent(props: Props) {
   const handleSend = async () => {
     const clean = draft.trim();
     if (!clean && !attachedFile) return;
-    await onSendMessage(clean, replyingToMessage?.id || null, attachedFile);
+
+    let attachmentPayload = null;
+    if (attachedFile) {
+      try {
+        attachmentPayload = await new Promise<Attachment>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            resolve({
+              name: attachedFile.name,
+              size: attachedFile.size,
+              type: attachedFile.type || 'application/octet-stream',
+              dataUrl: e.target?.result as string,
+            });
+          };
+          reader.onerror = () => reject(new Error('Fehler beim Lesen der Datei.'));
+          reader.readAsDataURL(attachedFile);
+        });
+      } catch (err: any) {
+        alert(err.message || 'Fehler beim Hochladen der Datei.');
+        return;
+      }
+    }
+
+    await onSendMessage(clean, replyingToMessage?.id || null, attachmentPayload);
     setDraft('');
     setReplyingToMessage(null);
-    setAttachedFile(null);
+    handleRemoveAttachment();
   };
 
   const renderMessage = (message: Message) => {
@@ -366,7 +405,7 @@ function ChatPanelComponent(props: Props) {
           <div className="attachment-preview-banner">
             <div className="attachment-preview-info">
               {attachedFile.type.startsWith('image/') ? (
-                <img src={attachedFile.dataUrl} className="attachment-preview-thumb" alt="Preview" />
+                <img src={previewUrl || ''} className="attachment-preview-thumb" alt="Preview" />
               ) : (
                 <div className="attachment-preview-icon">📄</div>
               )}
@@ -375,7 +414,7 @@ function ChatPanelComponent(props: Props) {
                 <span>{(attachedFile.size / 1024 / 1024).toFixed(2)} MB</span>
               </div>
             </div>
-            <button className="icon-button compact" onClick={() => setAttachedFile(null)} title="Entfernen">
+            <button className="icon-button compact" onClick={handleRemoveAttachment} title="Entfernen">
               ✕
             </button>
           </div>
