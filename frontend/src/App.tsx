@@ -469,8 +469,9 @@ export default function App() {
 
   const handleJoinVoice = useCallback(
     async (channelId: string) => {
-      if (!boot) throw new Error('Workspace not loaded');
-      const room = await joinVoiceRoom({ channelId, userId: boot.currentUser.id });
+      const currentBoot = bootRef.current;
+      if (!currentBoot) throw new Error('Workspace not loaded');
+      const room = await joinVoiceRoom({ channelId, userId: currentBoot.currentUser.id });
       setBoot((current) => {
         if (!current) return current;
         return {
@@ -492,13 +493,14 @@ export default function App() {
       }
       return room;
     },
-    [boot],
+    [],
   );
 
   const handleLeaveVoice = useCallback(
     async (channelId: string) => {
-      if (!boot) return;
-      const room = await leaveVoiceRoom({ channelId, userId: boot.currentUser.id });
+      const currentBoot = bootRef.current;
+      if (!currentBoot) return;
+      const room = await leaveVoiceRoom({ channelId, userId: currentBoot.currentUser.id });
       if (room) {
         setBoot((current) => {
           if (!current) return current;
@@ -521,7 +523,7 @@ export default function App() {
         }
       }
     },
-    [boot],
+    [],
   );
 
   const handleVoiceChunk = useCallback(

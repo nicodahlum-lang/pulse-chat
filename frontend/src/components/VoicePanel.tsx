@@ -103,17 +103,22 @@ function VoicePanelComponent({ channel, currentUser, voiceRoom, members, socket,
     };
   }, [channel.id, currentUser, socket, voiceMode]);
 
+  const onLeaveVoiceRef = useRef(onLeaveVoice);
+  useEffect(() => {
+    onLeaveVoiceRef.current = onLeaveVoice;
+  }, [onLeaveVoice]);
+
   useEffect(() => {
     return () => {
       if (joinedVoiceRef.current) {
-        void onLeaveVoice(channel.id).catch((error) => {
+        void onLeaveVoiceRef.current(channel.id).catch((error) => {
           console.warn('Failed to leave voice room during cleanup:', error);
         });
         joinedVoiceRef.current = false;
       }
       stopAllAudio();
     };
-  }, [channel.id, onLeaveVoice]);
+  }, [channel.id]);
 
   useEffect(() => {
     remotePeerIds.forEach((peerId) => {
