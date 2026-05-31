@@ -4,15 +4,11 @@ interface Props {
   workspaceName: string;
   onLogin: (input: { identifier: string; password: string }) => Promise<void>;
   onRegister: (input: { name: string; username: string; email: string; password: string; role: string }) => Promise<void>;
+  hasExistingUsers: boolean;
 }
 
-const DEMO_ACCOUNTS = [
-  { label: 'Mara', identifier: 'mara', password: 'mara1234' },
-  { label: 'Leo', identifier: 'leo', password: 'leo1234' },
-];
-
-export function LoginModal({ workspaceName, onLogin, onRegister }: Props) {
-  const [tab, setTab] = useState<'login' | 'register'>('login');
+export function LoginModal({ workspaceName, onLogin, onRegister, hasExistingUsers }: Props) {
+  const [tab, setTab] = useState<'login' | 'register'>(hasExistingUsers ? 'login' : 'register');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -69,26 +65,28 @@ export function LoginModal({ workspaceName, onLogin, onRegister }: Props) {
           <p className="helper">{workspaceName}</p>
         </div>
 
-        <div className="login-tabs">
-          <button
-            className={`login-tab ${tab === 'login' ? 'active' : ''}`}
-            onClick={() => {
-              setTab('login');
-              setError(null);
-            }}
-          >
-            Login
-          </button>
-          <button
-            className={`login-tab ${tab === 'register' ? 'active' : ''}`}
-            onClick={() => {
-              setTab('register');
-              setError(null);
-            }}
-          >
-            Konto erstellen
-          </button>
-        </div>
+        {hasExistingUsers && (
+          <div className="login-tabs">
+            <button
+              className={`login-tab ${tab === 'login' ? 'active' : ''}`}
+              onClick={() => {
+                setTab('login');
+                setError(null);
+              }}
+            >
+              Login
+            </button>
+            <button
+              className={`login-tab ${tab === 'register' ? 'active' : ''}`}
+              onClick={() => {
+                setTab('register');
+                setError(null);
+              }}
+            >
+              Konto erstellen
+            </button>
+          </div>
+        )}
 
         {error && <div className="login-error">{error}</div>}
 
@@ -128,26 +126,7 @@ export function LoginModal({ workspaceName, onLogin, onRegister }: Props) {
               {isSubmitting ? 'Melde an ...' : 'Login'}
             </button>
 
-            <div className="login-demo-box">
-              <strong>Demo-Zugänge</strong>
-              <div className="login-demo-list">
-                {DEMO_ACCOUNTS.map((account) => (
-                  <button
-                    key={account.identifier}
-                    type="button"
-                    className="login-demo-chip"
-                    onClick={() => {
-                      setIdentifier(account.identifier);
-                      setPassword(account.password);
-                      setTab('login');
-                    }}
-                  >
-                    <span>{account.label}</span>
-                    <small>{account.identifier} / {account.password}</small>
-                  </button>
-                ))}
-              </div>
-            </div>
+
           </form>
         ) : (
           <form onSubmit={handleRegister} className="login-form">

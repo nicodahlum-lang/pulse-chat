@@ -45,16 +45,16 @@ const defaultWorkspace = {
     tagline: 'Gruppen, Kanäle und Voice-Räume für lokale Teams.',
   },
   currentUser: {
-    id: 'me',
-    name: 'Mara',
-    handle: '@mara',
-    role: 'Product',
-    status: 'online',
+    id: 'guest',
+    name: 'Gast',
+    handle: '@gast',
+    role: 'Gast',
+    status: 'offline',
     avatar: {
       type: 'gradient',
-      from: '#9b8cff',
-      to: '#4dd6ff',
-      label: 'M',
+      from: '#cccccc',
+      to: '#999999',
+      label: 'G',
     },
   },
   servers: [
@@ -90,79 +90,28 @@ const defaultWorkspace = {
     { id: 'studio-build', serverId: 'signal-studio', name: 'build', type: 'text', topic: 'Design, Prototypen und Release-Notizen.' },
     { id: 'studio-room', serverId: 'signal-studio', name: 'voice booth', type: 'voice', topic: 'Live-Feedback und Review-Sessions.' },
   ],
-  members: [
-    { id: 'mara', name: 'Mara Klein', handle: '@mara', role: 'Product', status: 'online', serverId: 'orbit-hq', activity: 'führt ein Launch-Review' },
-    { id: 'leo', name: 'Leon', handle: '@leo', role: 'Engineering', status: 'online', serverId: 'orbit-hq', activity: 'arbeitet an Voice-Räumen' },
-    { id: 'nina', name: 'Nina', handle: '@nina', role: 'Design', status: 'idle', serverId: 'signal-studio', activity: 'skizziert neue Kanal-Layouts' },
-    { id: 'tom', name: 'Tom', handle: '@tom', role: 'Community', status: 'online', serverId: 'midnight-guild', activity: 'moderiert den Abendraum' },
-    { id: 'jules', name: 'Jules', handle: '@jules', role: 'Ops', status: 'offline', serverId: 'orbit-hq', activity: 'hat den letzten Huddle archiviert' },
-  ],
+  members: [],
   accounts: [],
   sessions: {},
-  messages: [
-    {
-      id: 'msg-1',
-      channelId: 'orbit-general',
-      userId: 'leo',
-      kind: 'text',
-      content: 'Ich habe die neue Channel-Sidebar live. Passt das Tempo für den Wechsel zwischen Gruppen?',
-      createdAt: '2026-05-28T07:20:00.000Z',
-    },
-    {
-      id: 'msg-2',
-      channelId: 'orbit-general',
-      userId: 'mara',
-      kind: 'text',
-      content: 'Ja, fühlt sich flott an. Lass uns noch einen klareren Voice-Einstieg und eine bessere Member-Rail ergänzen.',
-      createdAt: '2026-05-28T07:22:00.000Z',
-    },
-    {
-      id: 'msg-3',
-      channelId: 'orbit-launch',
-      userId: 'nina',
-      kind: 'text',
-      content: 'Das Launch-Board braucht noch ein Stück mehr Ruhe im Header, dann ist die Dichte perfekt.',
-      createdAt: '2026-05-28T08:10:00.000Z',
-    },
-    {
-      id: 'msg-4',
-      channelId: 'orbit-voice',
-      userId: 'tom',
-      kind: 'system',
-      content: 'Tom hat den Voice-Raum betreten.',
-      createdAt: '2026-05-28T08:24:00.000Z',
-    },
-    {
-      id: 'msg-5',
-      channelId: 'studio-build',
-      userId: 'nina',
-      kind: 'text',
-      content: 'Ich teste gerade eine neue Oberfläche mit einer schwebenden Voice-Konsole. Die Text-Chats fühlen sich dadurch ruhiger an.',
-      createdAt: '2026-05-28T08:55:00.000Z',
-    },
-  ],
+  messages: [],
   voiceRooms: {
     'orbit-voice': {
-      participants: ['mara', 'leo', 'tom'],
-      activeSpeakerId: 'leo',
-      lastSpeakingAt: '2026-05-28T08:26:00.000Z',
+      participants: [],
+      activeSpeakerId: null,
+      lastSpeakingAt: null,
     },
     'guild-raids': {
-      participants: ['tom'],
+      participants: [],
       activeSpeakerId: null,
       lastSpeakingAt: null,
     },
     'studio-room': {
-      participants: ['nina'],
+      participants: [],
       activeSpeakerId: null,
       lastSpeakingAt: null,
     },
   },
-  activity: [
-    { id: 'act-1', type: 'server', title: 'Orbit HQ ist aktiv', detail: '3 Textkanäle, 1 Voice-Raum', time: 'Vor 12 Min.' },
-    { id: 'act-2', type: 'voice', title: 'Leo spricht im War Room', detail: 'Push-to-talk läuft', time: 'Vor 2 Min.' },
-    { id: 'act-3', type: 'text', title: 'Nina hat im Build-Channel geschrieben', detail: '1 neue Nachricht', time: 'Gerade eben' },
-  ],
+  activity: [],
   settings: {
     density: 'compact',
     theme: 'midnight',
@@ -171,10 +120,7 @@ const defaultWorkspace = {
 
 let state = null;
 let writeQueue = Promise.resolve();
-const DEMO_CREDENTIALS = [
-  { memberId: 'mara', username: 'mara', email: 'mara@pulse.chat', password: 'mara1234' },
-  { memberId: 'leo', username: 'leo', email: 'leo@pulse.chat', password: 'leo1234' },
-];
+const DEMO_CREDENTIALS = [];
 
 function clone(value) {
   return structuredClone(value);
@@ -271,13 +217,44 @@ function normalizeAccount(account) {
 
 function normalizeState(snapshot) {
   const next = clone(snapshot ?? ensureSeedState());
+  
+  const DEMO_USER_IDS = ['mara', 'leo', 'nina', 'tom', 'jules'];
+  
+  if (Array.isArray(next.accounts)) {
+    next.accounts = next.accounts.filter((acc) => !acc.isDemo && !DEMO_USER_IDS.includes(acc.memberId));
+  }
+  
+  if (Array.isArray(next.members)) {
+    next.members = next.members.filter((member) => !DEMO_USER_IDS.includes(member.id));
+  }
+
+  if (Array.isArray(next.messages)) {
+    next.messages = next.messages.filter((msg) => !DEMO_USER_IDS.includes(msg.userId));
+  }
+
+  if (next.voiceRooms && typeof next.voiceRooms === 'object') {
+    for (const key of Object.keys(next.voiceRooms)) {
+      if (Array.isArray(next.voiceRooms[key].participants)) {
+        next.voiceRooms[key].participants = next.voiceRooms[key].participants.filter(
+          (p) => !DEMO_USER_IDS.includes(p)
+        );
+      }
+      if (DEMO_USER_IDS.includes(next.voiceRooms[key].activeSpeakerId)) {
+        next.voiceRooms[key].activeSpeakerId = null;
+      }
+    }
+  }
+
   next.members = Array.isArray(next.members) ? next.members.map((member) => ensureMemberAvatar(member)) : [];
   next.accounts = Array.isArray(next.accounts) ? next.accounts.map((account) => normalizeAccount(account)) : [];
   next.sessions = next.sessions && typeof next.sessions === 'object' && !Array.isArray(next.sessions) ? next.sessions : {};
-  if (!next.accounts.length) {
-    next.accounts = clone(ensureSeedState().accounts);
-  }
+  
   next.currentUser = ensureMemberAvatar(next.currentUser ?? defaultWorkspace.currentUser);
+  
+  if (DEMO_USER_IDS.includes(next.currentUser.id)) {
+    next.currentUser = ensureMemberAvatar(defaultWorkspace.currentUser);
+  }
+  
   return next;
 }
 

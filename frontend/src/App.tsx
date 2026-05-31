@@ -595,6 +595,7 @@ export default function App() {
     return (
       <LoginModal
         workspaceName={boot?.workspace.name ?? 'Pulse Chat'}
+        hasExistingUsers={boot ? boot.members.length > 0 : false}
         onLogin={async (input) => {
           const res = await login(input);
           localStorage.setItem('pulse_chat_session_token', res.token);

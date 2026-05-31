@@ -40,11 +40,20 @@ test('can register a custom member', async () => {
   assert.ok(state.members.find((m) => m.id === member.id));
 });
 
-test('can login with a seeded demo account', async () => {
+test('can login with a registered account', async () => {
   await resetState();
-  const result = await loginAccount({ identifier: 'mara', password: 'mara1234' });
-  assert.ok(result.token);
-  assert.equal(result.user.handle, '@mara');
+  const regResult = await registerAccount({
+    name: 'Test Login User',
+    username: 'testlogin',
+    email: 'testlogin@example.com',
+    password: 'password123',
+    role: 'User',
+  });
+  assert.ok(regResult.token);
+
+  const loginResult = await loginAccount({ identifier: 'testlogin', password: 'password123' });
+  assert.ok(loginResult.token);
+  assert.equal(loginResult.user.handle, '@testlogin');
 });
 
 test('can register a new authenticated account', async () => {

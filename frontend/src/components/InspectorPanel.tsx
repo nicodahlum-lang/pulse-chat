@@ -49,8 +49,8 @@ function InspectorPanelComponent({ server, members, activity, currentUser, voice
       <div className="section-label">Eigener Status</div>
       <div className="preview-card" style={{ display: 'grid', gap: '10px' }}>
         <div>
-          <strong>{currentUser?.name ?? 'Mara'}</strong>
-          <p className="helper" style={{ margin: '4px 0 0' }}>{currentUser?.handle ?? '@mara'} · {currentUser?.role ?? 'Product'}</p>
+          <strong>{currentUser?.name ?? 'Gast'}</strong>
+          <p className="helper" style={{ margin: '4px 0 0' }}>{currentUser?.handle ?? '@gast'} · {currentUser?.role ?? 'Gast'}</p>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
