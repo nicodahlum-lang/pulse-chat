@@ -1359,12 +1359,21 @@ a {
 .login-overlay {
   position: fixed;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
   background: radial-gradient(circle at center, rgba(11, 16, 32, 0.94) 0%, rgba(4, 5, 8, 0.98) 100%);
   backdrop-filter: blur(20px);
-  padding: 24px;
+  padding: 24px 16px;
+  overflow-y: auto;
   z-index: 100;
+}
+
+@media (min-height: 640px) {
+  .login-overlay {
+    justify-content: center;
+  }
 }
 
 .login-card {
@@ -1378,6 +1387,43 @@ a {
   flex-direction: column;
   backdrop-filter: blur(30px);
   animation: fadeInScale 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  margin: auto 0;
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 24px 20px;
+  }
+  .login-header {
+    margin-bottom: 16px;
+  }
+  .login-header .brand-mark {
+    width: 40px;
+    height: 40px;
+    font-size: 1.4rem;
+    margin-bottom: 8px;
+  }
+  .login-header h2 {
+    font-size: 1.5rem;
+  }
+  .login-form {
+    gap: 12px;
+  }
+  .login-submit-btn {
+    padding: 12px;
+    margin-top: 8px;
+  }
+  .field {
+    gap: 4px;
+  }
+  .field label {
+    font-size: 0.8rem;
+  }
+  .field input {
+    padding: 8px 12px;
+    font-size: 0.95rem;
+    min-height: 40px;
+  }
 }
 
 @keyframes fadeInScale {
