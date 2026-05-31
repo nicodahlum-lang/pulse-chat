@@ -191,7 +191,7 @@ function ChatPanelComponent(props: Props) {
     const parentMessage = message.parentId ? messages.find((m) => m.id === message.parentId) : null;
     const attachment = message.attachment;
     return (
-      <article key={message.id} className={`message ${message.kind === 'system' ? 'system' : ''}`}>
+      <article key={message.id} className={`message ${message.kind === 'system' ? 'system' : ''} ${message.sendingStatus || ''}`}>
         {parentMessage && (
           <div className="reply-quote">
             <span className="reply-arrow">⤷</span>
@@ -204,7 +204,15 @@ function ChatPanelComponent(props: Props) {
             <div className="avatar">{avatarFor(message.userId)}</div>
             <div className="meta-stack">
               <strong>{message.kind === 'system' ? 'System' : messageAuthor(message, members, currentUser)}</strong>
-              <span>{new Date(message.createdAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>{new Date(message.createdAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>
+                {message.sendingStatus === 'sending' && (
+                  <span className="status-sending-indicator" style={{ opacity: 0.6, fontSize: '0.8rem', color: 'var(--muted)' }}>· Senden...</span>
+                )}
+                {message.sendingStatus === 'failed' && (
+                  <span className="status-failed-indicator" style={{ fontSize: '0.8rem', color: 'var(--danger)', fontWeight: 'bold' }}>· Fehlgeschlagen ⚠️</span>
+                )}
+              </div>
             </div>
           </div>
           <span className="message-time">{channel?.type === 'voice' ? 'Voice' : 'Text'}</span>

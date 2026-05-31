@@ -45,12 +45,45 @@ interface ClientToServerEvents {
   'typing:update': (payload: { channelId: string; userId: string; isTyping: boolean }) => void;
 }
 
+function getCachedBootstrap(): BootstrapPayload | null {
+  if (typeof window !== 'undefined') {
+    const cached = localStorage.getItem('pulse_chat_bootstrap_cache');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
 export default function App() {
   const socketRef = useRef<Socket<ServerToClientEvents, ClientToServerEvents> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const bootRef = useRef<BootstrapPayload | null>(null);
+  const bootRef = useRef<BootstrapPayload | null>(getCachedBootstrap());
   const selectedChannelRef = useRef<string>('');
-  const [boot, setBoot] = useState<BootstrapPayload | null>(null);
+  const [boot, setBootState] = useState<BootstrapPayload | null>(bootRef.current);
+
+  const setBoot = useCallback((updater: BootstrapPayload | null | ((curr: BootstrapPayload | null) => BootstrapPayload | null)) => {
+    setBootState((current) => {
+      const next = typeof updater === 'function' ? (updater as Function)(current) : updater;
+      bootRef.current = next;
+      if (typeof window !== 'undefined') {
+        try {
+          if (next) {
+            localStorage.setItem('pulse_chat_bootstrap_cache', JSON.stringify(next));
+          } else {
+            localStorage.removeItem('pulse_chat_bootstrap_cache');
+          }
+        } catch (e) {
+          console.warn('Failed to write bootstrap cache:', e);
+        }
+      }
+      return next;
+    });
+  }, []);
   const [selectedServerId, setSelectedServerId] = useState<string>('');
   const [selectedChannelId, setSelectedChannelId] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -343,29 +376,66 @@ export default function App() {
 
   const handleSendMessage = useCallback(
     async (content: string, parentId?: string | null, attachment?: Attachment | null) => {
-      if (!currentChannel || currentChannel.type === 'voice' || !boot) return;
+      const currentBoot = bootRef.current;
+      if (!currentChannel || currentChannel.type === 'voice' || !currentBoot) return;
       const clean = content.trim();
       if (!clean && !attachment) return;
-      const message = await createMessage({
+
+      const tempId = `temp-${Date.now()}`;
+      const tempMessage: Message = {
+        id: tempId,
         channelId: currentChannel.id,
+        userId: currentBoot.currentUser.id,
+        kind: 'text',
         content: clean,
-        userId: boot.currentUser.id,
+        createdAt: new Date().toISOString(),
         parentId: parentId || null,
+        reactions: [],
         attachment: attachment || null,
-      });
+        sendingStatus: 'sending',
+      };
+
+      // Add temporary message optimistically
       setBoot((current) => {
         if (!current) return current;
-        return { ...current, messages: mergeMessage(current.messages, message) };
-      });
-      if (bootRef.current) {
-        bootRef.current = {
-          ...bootRef.current,
-          messages: mergeMessage(bootRef.current.messages, message),
+        return {
+          ...current,
+          messages: mergeMessage(current.messages, tempMessage),
         };
-      }
+      });
+
       handleTypingChange(false);
+
+      try {
+        const message = await createMessage({
+          channelId: currentChannel.id,
+          content: clean,
+          userId: currentBoot.currentUser.id,
+          parentId: parentId || null,
+          attachment: attachment || null,
+        });
+
+        // Replace temporary message with actual message on success
+        setBoot((current) => {
+          if (!current) return current;
+          return {
+            ...current,
+            messages: current.messages.map((m) => (m.id === tempId ? { ...message, sendingStatus: 'sent' } : m)),
+          };
+        });
+      } catch (err) {
+        console.error('Failed to send message:', err);
+        // Mark as failed on error
+        setBoot((current) => {
+          if (!current) return current;
+          return {
+            ...current,
+            messages: current.messages.map((m) => (m.id === tempId ? { ...m, sendingStatus: 'failed' } : m)),
+          };
+        });
+      }
     },
-    [boot, currentChannel, handleTypingChange],
+    [currentChannel, handleTypingChange, setBoot],
   );
 
   const handleToggleReaction = useCallback(async (messageId: string, emoji: string) => {
@@ -729,7 +799,7 @@ export default function App() {
               currentUser={boot?.currentUser ?? null}
               voiceRoom={voiceRoom}
               serverMismatch={channelMismatch}
-              loading={loading}
+              loading={loading && !boot}
               error={error}
               onTypingChange={handleTypingChange}
               searchQuery={searchQuery}

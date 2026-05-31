@@ -7,6 +7,14 @@
       "model": "openrouter/free",
       "summary": "hello",
       "message_count": 18
+    },
+    {
+      "id": "abc41cc5",
+      "created_at": "2026-05-31T00:20:53.160531Z",
+      "updated_at": "2026-05-31T00:20:53.160531Z",
+      "model": "openrouter/free",
+      "summary": "",
+      "message_count": 0
     }
   ]
 }

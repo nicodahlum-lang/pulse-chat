@@ -69,6 +69,7 @@ export interface Message {
   parentId?: string | null;
   reactions?: { emoji: string; userIds: string[] }[];
   attachment?: Attachment | null;
+  sendingStatus?: 'sending' | 'sent' | 'failed';
 }
 
 export interface VoiceRoom {

@@ -1,8 +1,11 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomUUID, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
 import pg from 'pg';
+
+const scryptAsync = promisify(scrypt);
 
 let pool = null;
 
@@ -138,14 +141,14 @@ function compactId(prefix) {
   return `${prefix}-${randomUUID().slice(0, 8)}`;
 }
 
-function createPasswordDigest(password, salt = randomBytes(16).toString('hex')) {
-  const hash = scryptSync(String(password), salt, 64).toString('hex');
-  return { salt, hash };
+async function createPasswordDigest(password, salt = randomBytes(16).toString('hex')) {
+  const hashBuffer = await scryptAsync(String(password), salt, 64);
+  return { salt, hash: hashBuffer.toString('hex') };
 }
 
-function verifyPassword(password, salt, expectedHash) {
+async function verifyPassword(password, salt, expectedHash) {
   try {
-    const actualHash = scryptSync(String(password), salt, 64);
+    const actualHash = await scryptAsync(String(password), salt, 64);
     const expectedBuffer = Buffer.from(String(expectedHash), 'hex');
     return actualHash.length === expectedBuffer.length && timingSafeEqual(actualHash, expectedBuffer);
   } catch {
@@ -163,19 +166,7 @@ function ensureDataDir() {
 
 function ensureSeedState() {
   const snapshot = clone(defaultWorkspace);
-  snapshot.accounts = DEMO_CREDENTIALS.map((credential) => {
-    const { salt, hash } = createPasswordDigest(credential.password);
-    return {
-      id: `account-${credential.memberId}`,
-      memberId: credential.memberId,
-      username: credential.username,
-      email: credential.email,
-      passwordSalt: salt,
-      passwordHash: hash,
-      isDemo: true,
-      createdAt: new Date().toISOString(),
-    };
-  });
+  snapshot.accounts = [];
   snapshot.sessions = {};
   return snapshot;
 }
@@ -757,7 +748,7 @@ export async function registerAccount(input) {
       : undefined,
   };
 
-  const { salt, hash } = createPasswordDigest(password);
+  const { salt, hash } = await createPasswordDigest(password);
   const account = {
     id: `account-${member.id}`,
     memberId: member.id,
@@ -793,7 +784,7 @@ export async function loginAccount(input) {
   const password = String(input.password ?? '');
   const account = findAccountByIdentifier(snapshot, identifier);
 
-  if (!account || !verifyPassword(password, account.passwordSalt, account.passwordHash)) {
+  if (!account || !(await verifyPassword(password, account.passwordSalt, account.passwordHash))) {
     throw new Error('Invalid login credentials');
   }
 

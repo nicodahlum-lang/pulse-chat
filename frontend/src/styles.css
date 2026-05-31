@@ -569,6 +569,23 @@ a {
   border-style: dashed;
 }
 
+.message.sending {
+  opacity: 0.55;
+}
+
+.message.sending .message-hover-actions {
+  display: none !important;
+}
+
+.message.failed {
+  border-left: 3px solid var(--danger);
+  background: rgba(255, 110, 143, 0.03);
+}
+
+.message.failed .message-body {
+  color: var(--danger);
+}
+
 .message-head {
   display: flex;
   justify-content: space-between;
