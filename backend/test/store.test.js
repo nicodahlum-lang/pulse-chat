@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resetState, createMessage, createServer, createChannel, loadState, seededWorkspace, registerMember, loginAccount, registerAccount } from '../src/store.js';
+import { resetState, createMessage, createServer, createChannel, loadState, seededWorkspace, registerMember, loginAccount, registerAccount, joinVoiceRoom, leaveVoiceRoom, removeVoiceParticipant, setVoiceSpeaker } from '../src/store.js';
 
 test('seeded workspace includes text and voice channels', async () => {
   const state = await resetState();
@@ -100,5 +100,30 @@ test('can create a message with attachment', async () => {
   assert.ok(savedMsg);
   assert.ok(savedMsg.attachment);
   assert.equal(savedMsg.attachment.type, 'application/pdf');
+});
+
+test('can join, speak and leave a voice channel', async () => {
+  await resetState();
+  const server = await createServer({ name: 'Voice Test Space', icon: '🔊', description: 'Voice testing' });
+  const channel = await createChannel({ serverId: server.id, name: 'huddle', type: 'voice' });
+
+  // Join the voice room
+  const room = await joinVoiceRoom({ channelId: channel.id, userId: 'test-user-1' });
+  assert.ok(room.participants.includes('test-user-1'));
+
+  // Set as speaker
+  const roomSpeaking = await setVoiceSpeaker({ channelId: channel.id, userId: 'test-user-1', speaking: true });
+  assert.equal(roomSpeaking.activeSpeakerId, 'test-user-1');
+
+  // Another user joins
+  const roomUser2 = await joinVoiceRoom({ channelId: channel.id, userId: 'test-user-2' });
+  assert.ok(roomUser2.participants.includes('test-user-1'));
+  assert.ok(roomUser2.participants.includes('test-user-2'));
+
+  // User 1 leaves
+  const roomLeft = await removeVoiceParticipant(channel.id, 'test-user-1');
+  assert.ok(!roomLeft.participants.includes('test-user-1'));
+  assert.ok(roomLeft.participants.includes('test-user-2'));
+  assert.equal(roomLeft.activeSpeakerId, null);
 });
 
