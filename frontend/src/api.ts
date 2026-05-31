@@ -1,4 +1,4 @@
-import type { BootstrapPayload, Channel, ChannelType, Message, Server, VoiceRoom } from './types';
+import type { BootstrapPayload, Channel, ChannelType, Message, Server, VoiceRoom, Attachment } from './types';
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const sessionToken = typeof window !== 'undefined' ? localStorage.getItem('pulse_chat_session_token') : null;
@@ -66,7 +66,7 @@ export function createChannel(input: { serverId: string; name: string; type: Cha
   });
 }
 
-export function createMessage(input: { channelId: string; content: string; userId?: string; parentId?: string | null }) {
+export function createMessage(input: { channelId: string; content: string; userId?: string; parentId?: string | null; attachment?: Attachment | null }) {
   return fetchJson<Message>('/api/messages', {
     method: 'POST',
     body: JSON.stringify(input),

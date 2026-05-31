@@ -8,6 +8,14 @@ export interface Avatar {
   label: string;
 }
 
+export interface Attachment {
+  name: string;
+  size: number;
+  type: string;
+  dataUrl: string;
+}
+
+
 export interface Workspace {
   id: string;
   name: string;
@@ -60,6 +68,7 @@ export interface Message {
   createdAt: string;
   parentId?: string | null;
   reactions?: { emoji: string; userIds: string[] }[];
+  attachment?: Attachment | null;
 }
 
 export interface VoiceRoom {

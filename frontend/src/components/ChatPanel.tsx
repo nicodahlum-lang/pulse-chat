@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import type { Channel, CurrentUser, Member, Message, VoiceRoom } from '../types';
+import type { Channel, CurrentUser, Member, Message, VoiceRoom, Attachment } from '../types';
 import { VoicePanel } from './VoicePanel';
 import { Markdown } from './Markdown';
 
@@ -16,7 +16,7 @@ interface Props {
   typingUsers: string[];
   onTypingChange: (isTyping: boolean) => void;
   onSearchQueryChange: (value: string) => void;
-  onSendMessage: (value: string, parentId?: string | null) => Promise<void>;
+  onSendMessage: (value: string, parentId?: string | null, attachment?: Attachment | null) => Promise<void>;
   onJoinVoice: (channelId: string) => Promise<VoiceRoom>;
   onLeaveVoice: (channelId: string) => Promise<void>;
   onVoiceChunk: (channelId: string, chunk: Blob, mimeType: string, speaking: boolean) => void;
@@ -42,10 +42,17 @@ function messageAuthor(message: Message, members: Member[], currentUser: Current
 
 function ChatPanelComponent(props: Props) {
   const { channel, messages, members, currentUser, voiceRoom, serverMismatch, loading, error, searchQuery, typingUsers, onTypingChange, onSearchQueryChange, onSendMessage, onJoinVoice, onLeaveVoice, onVoiceChunk, socket, onToggleReaction } = props;
+  
   const messageRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dragCounter = useRef(0);
+
   const [draft, setDraft] = useState('');
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [replyingToMessage, setReplyingToMessage] = useState<Message | null>(null);
+  const [attachedFile, setAttachedFile] = useState<Attachment | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalSearch(searchQuery);
@@ -68,16 +75,82 @@ function ChatPanelComponent(props: Props) {
       .join(' · ');
   }, [members, voiceRoom.participants]);
 
+  const processFile = (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Datei ist zu groß! Maximale Dateigröße ist 5 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      if (dataUrl) {
+        setAttachedFile({
+          name: file.name,
+          size: file.size,
+          type: file.type || 'application/octet-stream',
+          dataUrl,
+        });
+      }
+    };
+    reader.onerror = () => {
+      alert('Fehler beim Lesen der Datei.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      processFile(file);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processFile(e.target.files[0]);
+    }
+  };
+
   const handleSend = async () => {
     const clean = draft.trim();
-    if (!clean) return;
-    await onSendMessage(clean, replyingToMessage?.id || null);
+    if (!clean && !attachedFile) return;
+    await onSendMessage(clean, replyingToMessage?.id || null, attachedFile);
     setDraft('');
     setReplyingToMessage(null);
+    setAttachedFile(null);
   };
 
   const renderMessage = (message: Message) => {
     const parentMessage = message.parentId ? messages.find((m) => m.id === message.parentId) : null;
+    const attachment = message.attachment;
     return (
       <article key={message.id} className={`message ${message.kind === 'system' ? 'system' : ''}`}>
         {parentMessage && (
@@ -99,7 +172,38 @@ function ChatPanelComponent(props: Props) {
         </div>
         
         <div className="message-body">
-          <Markdown content={message.content} />
+          {message.content && <Markdown content={message.content} />}
+          {attachment && (
+            <div className="message-attachment">
+              {attachment.type.startsWith('image/') ? (
+                <div className="message-attachment-image-container">
+                  <img
+                    src={attachment.dataUrl}
+                    className="message-attachment-image"
+                    alt={attachment.name}
+                    onClick={() => setLightboxUrl(attachment.dataUrl)}
+                  />
+                  <div className="image-attachment-meta">
+                    {attachment.name} ({(attachment.size / 1024 / 1024).toFixed(2)} MB)
+                  </div>
+                </div>
+              ) : (
+                <a
+                  href={attachment.dataUrl}
+                  download={attachment.name}
+                  className="message-attachment-file-card"
+                  title="Klicken zum Herunterladen"
+                >
+                  <div className="file-card-icon">📄</div>
+                  <div className="file-card-info">
+                    <strong>{attachment.name}</strong>
+                    <span>{(attachment.size / 1024).toFixed(1)} KB · Herunterladen</span>
+                  </div>
+                  <div className="file-card-download-icon">⬇</div>
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
         {message.kind !== 'system' && (
@@ -203,7 +307,23 @@ function ChatPanelComponent(props: Props) {
   }
 
   return (
-    <section className="conversation">
+    <section 
+      className={`conversation ${isDragging ? 'dragging' : ''}`}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragging && (
+        <div className="drag-drop-overlay">
+          <div className="drag-drop-zone">
+            <div className="drag-icon">📎</div>
+            <h3>Datei hier ablegen</h3>
+            <p className="helper">Bilder oder Dokumente bis zu 5 MB</p>
+          </div>
+        </div>
+      )}
+
       <div className="preview-card" style={{ padding: '12px 14px' }}>
         <label htmlFor="message-search" className="helper" style={{ display: 'block', marginBottom: '8px' }}>
           Nachrichten durchsuchen
@@ -241,7 +361,33 @@ function ChatPanelComponent(props: Props) {
             </button>
           </div>
         )}
+        
+        {attachedFile && (
+          <div className="attachment-preview-banner">
+            <div className="attachment-preview-info">
+              {attachedFile.type.startsWith('image/') ? (
+                <img src={attachedFile.dataUrl} className="attachment-preview-thumb" alt="Preview" />
+              ) : (
+                <div className="attachment-preview-icon">📄</div>
+              )}
+              <div className="attachment-preview-details">
+                <strong>{attachedFile.name}</strong>
+                <span>{(attachedFile.size / 1024 / 1024).toFixed(2)} MB</span>
+              </div>
+            </div>
+            <button className="icon-button compact" onClick={() => setAttachedFile(null)} title="Entfernen">
+              ✕
+            </button>
+          </div>
+        )}
+
         <div className="composer-row">
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
           <textarea
             value={draft}
             onChange={(event) => {
@@ -258,6 +404,14 @@ function ChatPanelComponent(props: Props) {
             placeholder={`Nachricht an #${channel.name} senden ...`}
           />
           <div className="composer-actions">
+            <button 
+              className="icon-button" 
+              aria-label="Datei anhängen" 
+              title="Datei anhängen"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              📎
+            </button>
             <button className="icon-button" aria-label="Schnellreaktion" title="Schnellreaktion">
               ✦
             </button>
@@ -273,6 +427,15 @@ function ChatPanelComponent(props: Props) {
           {typingUsers.length > 0 ? `${typingUsers.join(' · ')} tippt gerade …` : 'Niemand tippt gerade.'}
         </div>
       </div>
+
+      {lightboxUrl && (
+        <div className="lightbox-overlay" onClick={() => setLightboxUrl(null)}>
+          <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <img src={lightboxUrl} alt="Zoomed view" />
+            <button className="lightbox-close" onClick={() => setLightboxUrl(null)}>✕</button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

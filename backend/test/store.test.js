@@ -64,3 +64,32 @@ test('can register a new authenticated account', async () => {
   assert.ok(state.members.find((member) => member.id === 'casey'));
   assert.ok(state.accounts.find((account) => account.username === 'casey'));
 });
+
+test('can create a message with attachment', async () => {
+  await resetState();
+  const server = await createServer({ name: 'Media Channel', icon: '📎', description: 'Upload space' });
+  const channel = await createChannel({ serverId: server.id, name: 'files', type: 'text' });
+  const attachment = {
+    name: 'document.pdf',
+    size: 20480,
+    type: 'application/pdf',
+    dataUrl: 'data:application/pdf;base64,JVBERi0xLjQKJ...'
+  };
+  const message = await createMessage({
+    channelId: channel.id,
+    content: '',
+    attachment
+  });
+  
+  assert.equal(message.content, '');
+  assert.ok(message.attachment);
+  assert.equal(message.attachment.name, 'document.pdf');
+  assert.equal(message.attachment.size, 20480);
+  
+  const state = await loadState();
+  const savedMsg = state.messages.find(m => m.id === message.id);
+  assert.ok(savedMsg);
+  assert.ok(savedMsg.attachment);
+  assert.equal(savedMsg.attachment.type, 'application/pdf');
+});
+

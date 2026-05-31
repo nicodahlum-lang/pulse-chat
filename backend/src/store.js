@@ -486,7 +486,7 @@ export async function createMessage(input) {
   }
   const userId = input.userId || snapshot.currentUser.id;
   const content = normalizeMessageContent(input.content);
-  if (!content) {
+  if (!content && !input.attachment) {
     throw new Error('Message cannot be empty');
   }
   const message = {
@@ -494,17 +494,18 @@ export async function createMessage(input) {
     channelId: channel.id,
     userId,
     kind: 'text',
-    content: content.slice(0, 1000),
+    content: content ? content.slice(0, 1000) : '',
     createdAt: new Date().toISOString(),
     parentId: input.parentId || null,
     reactions: [],
+    attachment: input.attachment || null,
   };
   snapshot.messages.push(message);
   pushActivity(snapshot, {
     id: compactId('act'),
     type: 'text',
     title: channel.type === 'dm' ? 'Neue Direktnachricht' : 'Neue Nachricht im Textchat',
-    detail: content.slice(0, 80),
+    detail: content ? content.slice(0, 80) : `Anhang: ${message.attachment.name}`,
     time: 'Gerade eben',
   });
   await saveState(snapshot);

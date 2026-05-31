@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { createChannel, createMessage, createServer, getBootstrap, joinVoiceRoom, leaveVoiceRoom, getOrCreateDM, toggleReaction, login, registerAccount, logout } from './api';
-import type { BootstrapPayload, Message, VoiceRoom, Presence, Member } from './types';
+import type { BootstrapPayload, Message, VoiceRoom, Presence, Member, Attachment } from './types';
 import { ChannelSidebar } from './components/ChannelSidebar';
 import { ChatPanel } from './components/ChatPanel';
 import { CreateChannelModal } from './components/CreateChannelModal';
@@ -342,15 +342,16 @@ export default function App() {
   );
 
   const handleSendMessage = useCallback(
-    async (content: string, parentId?: string | null) => {
+    async (content: string, parentId?: string | null, attachment?: Attachment | null) => {
       if (!currentChannel || currentChannel.type === 'voice' || !boot) return;
       const clean = content.trim();
-      if (!clean) return;
+      if (!clean && !attachment) return;
       const message = await createMessage({
         channelId: currentChannel.id,
         content: clean,
         userId: boot.currentUser.id,
         parentId: parentId || null,
+        attachment: attachment || null,
       });
       setBoot((current) => {
         if (!current) return current;
